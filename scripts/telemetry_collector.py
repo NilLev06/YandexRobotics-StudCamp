@@ -103,6 +103,25 @@ def read_throttled() -> str | None:
     return value or None
 
 
+def read_clock_synced() -> bool | None:
+    """timedatectl: was the clock set from NTP or is the Pi still on its
+    power-on default (no RTC battery -> timestamps are unreliable until
+    synced)."""
+    try:
+        out = subprocess.run(
+            ["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+            capture_output=True, text=True, timeout=2.0,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    value = out.stdout.strip()
+    if value in ("yes", "no"):
+        return value == "yes"
+    return None
+
+
 def read_wifi() -> dict | None:
     try:
         with open("/proc/net/wireless", "r", encoding="ascii") as handle:
@@ -235,9 +254,19 @@ def main() -> int:
     last_guard = 0.0
     last_yolo_seq = None
     recorders_stopped = False
+    last_clock_synced = None
 
     while not stop["requested"]:
         cycle_started = time.monotonic()
+
+        clock_synced = read_clock_synced()
+        if clock_synced is not None and clock_synced != last_clock_synced:
+            # The Pi has no RTC battery: timestamps before the first sync
+            # are unreliable. Log the transition so recordings can be
+            # flagged/corrected instead of silently trusted.
+            append_jsonl(events_path, {"ts": utc_now(), "event": "clock_sync_changed",
+                                       "clock_synced": clock_synced})
+            last_clock_synced = clock_synced
 
         record = {
             "ts": utc_now(),
@@ -246,6 +275,7 @@ def main() -> int:
             "throttled": read_throttled(),
             "disk_free_gb": round(shutil.disk_usage(sessions_dir).free / GIB, 2),
             "wifi": read_wifi(),
+            "clock_synced": clock_synced,
         }
         record.update(read_meminfo())
         if cycle_started - last_docker >= DOCKER_STATS_INTERVAL_S:

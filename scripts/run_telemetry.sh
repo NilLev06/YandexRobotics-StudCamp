@@ -67,7 +67,8 @@ while (( ! shutting_down )); do
   "started_at_utc": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "hostname": "$(hostname)",
   "git_rev": "$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)",
-  "session_seconds": $TELEMETRY_SESSION_SECONDS
+  "session_seconds": $TELEMETRY_SESSION_SECONDS,
+  "clock_synced_at_start": $(timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qx yes && echo true || echo false)
 }
 EOF
 
