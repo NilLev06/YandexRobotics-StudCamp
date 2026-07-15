@@ -1,0 +1,27 @@
+# Второй экземпляр mediamtx внутри телеметрийного контейнера: тянет готовый
+# H264-поток с основного контейнера ros и пишет его сегментами на диск без
+# перекодирования. Все свои серверные листенеры выключены — это чистый рекордер.
+
+logLevel: info
+api: no
+metrics: no
+pprof: no
+playback: no
+rtsp: no
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+
+paths:
+  cam:
+    source: rtsp://ros:8554/cam
+    sourceOnDemand: no
+    record: yes
+    # Имя сегмента = UTC-время его начала
+    recordPath: /logs/session/video/cam_%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4
+    recordPartDuration: 1s
+    recordSegmentDuration: 2m
+    # Ротацией занимается сторож диска в telemetry_collector.py
+    recordDeleteAfter: 0s
