@@ -1,0 +1,53 @@
+# Лёгкая веб-панель с графиками (батарея, температура, лидар, диск, Wi-Fi,
+# что видит YOLO, статус текущей цели навигации). Никакого Prometheus/Grafana —
+# один процесс, история держится в памяти, графики рисуются в браузере.
+
+services:
+  dashboard:
+    image: registry.robotics-lab.ru/robomarvel:v6
+    container_name: z-boys-dashboard
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    cpu_shares: 128
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: /opt/ros/jazzy/lib/python3.12/site-packages
+      LD_LIBRARY_PATH: /opt/ros/jazzy/lib/aarch64-linux-gnu:/opt/ros/jazzy/lib:/usr/local/lib/aarch64-linux-gnu
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOG_DIR: /tmp
+      DASHBOARD_HOST: 0.0.0.0
+      DASHBOARD_PORT: "8092"
+      DASHBOARD_YOLO_URL: http://z-boys-yolo-live:8091/health
+      DASHBOARD_DISK_PATH: /host-root
+    entrypoint:
+      - /root/venv/bin/python
+      - -u
+      - /app/dashboard.py
+    volumes:
+      - ./scripts/dashboard.py:/app/dashboard.py:ro
+      # read-only bind so the disk-free reading matches the host, not the container overlay
+      - /:/host-root:ro
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    ports:
+      - "0.0.0.0:8092:8092"
+    networks:
+      - rover-main
+    stop_grace_period: 8s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  rover-main:
+    external: true
+    name: robomarvel_default
