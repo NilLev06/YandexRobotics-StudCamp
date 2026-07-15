@@ -22,6 +22,9 @@ class STTNode(Node):
         self.iam_token = self.get_parameter('iam_token').value
         self.folder_id = self.get_parameter('folder_id').value
 
+        self.audio = None
+        self.recording = False
+
         if not self.iam_token:
             self.get_logger().error('IAM token not provided!')
             return
@@ -170,7 +173,8 @@ class STTNode(Node):
             self.record_thread.join(timeout=2.0)
         if hasattr(self, 'recognize_thread'):
             self.recognize_thread.join(timeout=2.0)
-        self.audio.terminate()
+        if self.audio is not None:
+            self.audio.terminate()
         super().destroy_node()
 
 def main(args=None):

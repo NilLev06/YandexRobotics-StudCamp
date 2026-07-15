@@ -6,3 +6,4 @@ install/
 core.*
 .ipynb_checkpoints
 .autostart
+.DS_Store

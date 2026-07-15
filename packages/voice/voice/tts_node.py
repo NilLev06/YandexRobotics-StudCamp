@@ -22,6 +22,8 @@ class TTSNode(Node):
         self.iam_token = self.get_parameter('iam_token').value
         self.folder_id = self.get_parameter('folder_id').value
 
+        self.audio = None
+
         if not self.iam_token:
             self.get_logger().error('IAM token not provided!')
             return
@@ -138,7 +140,8 @@ class TTSNode(Node):
 
     def destroy_node(self):
         """Корректное завершение"""
-        self.audio.terminate()
+        if self.audio is not None:
+            self.audio.terminate()
         super().destroy_node()
 
 def main(args=None):
