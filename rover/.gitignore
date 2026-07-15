@@ -1,8 +1,0 @@
-.env*
-ansible/inventory.yaml
-__pycache__
-build/
-install/
-core.*
-.ipynb_checkpoints
-.autostart
