@@ -1,0 +1,6 @@
+launch:
+  - include:
+      file: $(find-pkg-share slam_toolbox)/launch/online_async_launch.py
+      arg:
+      - { name: use_sim_time, value: "false" }
+      - { name: slam_params_file, value: "$(find-pkg-share main)/config/params.yaml" }

@@ -1,0 +1,18 @@
+diff --git a/loopback_simulator.py b/loopback_simulator.py
+index 76cf86f..1296e92 100644
+--- a/loopback_simulator.py
++++ b/loopback_simulator.py
+@@ -170,6 +170,13 @@ class LoopbackSimulator(Node):
+         self.tf_broadcaster.sendTransform(self.t_odom_to_base_link)
+         if self.mat_base_to_laser is None:
+             self.getBaseToLaserTf()
++        
++        if self.initial_pose is None:
++            msg = PoseWithCovarianceStamped()
++            msg.header.stamp = self.get_clock().now().to_msg()
++            msg.header.frame_id = self.base_frame_id
++            msg.pose.pose.orientation.w = 1.0
++            self.initialPoseCallback(msg)
+ 
+     def clockTimerCallback(self):
+         msg = Clock()

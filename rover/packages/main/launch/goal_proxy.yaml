@@ -1,0 +1,6 @@
+launch:
+- node:
+    pkg: "main"
+    exec: "goal_proxy.py"
+    name: "goal_proxy"
+    output: "screen"

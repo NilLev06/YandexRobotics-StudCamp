@@ -1,0 +1,8 @@
+launch:
+  - include:
+      file: $(find-pkg-share main)/launch/bringup_launch.py
+      arg:
+      # - { name: map, value: "$(find-pkg-share main)/launch/tb3_sandbox.yaml" }
+      # - { name: map, value: "$(find-pkg-share main)/launch/costmap.yaml" }
+      - { name: use_slam, value: "False" }
+      - { name: use_sim_time, value: "False" }

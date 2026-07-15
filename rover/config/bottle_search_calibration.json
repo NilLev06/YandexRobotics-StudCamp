@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "calibrated": false,
+  "camera": {
+    "width_px": null,
+    "height_px": null,
+    "intrinsics": {
+      "fx_px": null,
+      "fy_px": null,
+      "cx_px": null,
+      "cy_px": null
+    },
+    "distortion_model": "plumb_bob",
+    "distortion_coefficients": [null, null, null, null, null]
+  },
+  "extrinsics": {
+    "lidar_frame": "lidar",
+    "camera_optical_frame": "camera_optical_frame",
+    "lidar_to_camera": {
+      "translation_m": [null, null, null],
+      "quaternion_xyzw": [null, null, null, null]
+    },
+    "convention": "p_camera = R(quaternion_xyzw) * p_lidar + translation_m"
+  },
+  "validation": {
+    "validated": false,
+    "sample_count": 0,
+    "rms_reprojection_error_px": null,
+    "validated_at_utc": null,
+    "method": null
+  },
+  "safety_validation": {
+    "measured_chassis_swept_radius_m": null,
+    "lidar_bearing_validated": false,
+    "scan_plane_intersects_floor_bottle": false,
+    "supervised_standoff_trials": 0
+  },
+  "association": {
+    "min_lidar_points": 3,
+    "min_scans": 3,
+    "max_index_gap": 2,
+    "bbox_padding_fraction": 0.08,
+    "max_range_mad_m": 0.08,
+    "max_range_spread_m": 0.25,
+    "max_scan_target_drift_m": 0.12,
+    "max_target_bearing_deg": 35.0
+  }
+}

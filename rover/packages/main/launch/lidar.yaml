@@ -1,0 +1,10 @@
+launch:
+- node:
+    pkg: "ld19_lidar"
+    exec: "ld19_node"
+    name: "ld19_node"
+    output: "screen"
+    param:
+    - {name: port, value: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0 }
+    - {name: frame_id, value: lidar}
+    - {name: topic_name, value: /scan}

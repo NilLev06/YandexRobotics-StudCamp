@@ -1,0 +1,17 @@
+launch:
+
+- let:
+    name: robot_urdf_xacro
+    value: $(find-pkg-share main)/config/robot.urdf
+
+- let:
+    name: robot_urdf_compiled
+    value: $(command '$(find-exec xacro) $(var robot_urdf_xacro)')
+
+- node:
+    pkg: robot_state_publisher
+    exec: robot_state_publisher
+    name: robot_state_publisher
+    output: log
+    param:
+    - { name: robot_description, value: "$(var robot_urdf_compiled)" }

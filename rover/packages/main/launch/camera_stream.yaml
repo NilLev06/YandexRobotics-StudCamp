@@ -1,0 +1,6 @@
+launch:
+- executable:
+    name: camera_stream
+    cmd: "mediamtx $(find-pkg-share main)/config/mediamtx.yaml"
+    output: screen
+    shell: True

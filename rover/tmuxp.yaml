@@ -1,0 +1,9 @@
+session_name: main
+suppress_history: false
+options:
+  mouse: on
+windows:
+  - window_name: ros
+    panes: [ros2 launch main main.yaml]
+  - window_name: jupyter
+    panes: [jupyter lab]

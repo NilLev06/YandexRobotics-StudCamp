@@ -1,0 +1,18 @@
+launch:
+- node:
+    pkg: "rtabmap_odom"
+    exec: "icp_odometry"
+    name: "icp_odom"
+    remap:
+      - { from: "scan", to: "/scan" }
+      - { from: "odom", to: "/icp/odom" }
+    param:
+      # - { name: "scan_downsampling_step", value: 1 }
+      # - { name: "scan_voxel_size", value: 0.0 }
+      # - { name: "scan_normal_k", value: 0 }
+      # - { name: "deskewing", value: false }
+      # - { name: "deskewing_slerp", value: false }
+      - { name: "frame_id", value: "base_link" }
+      - { name: "Odom/ResetCountdown", value: "1" }
+      - { name: "publish_tf", value: true }
+    args: "--ros-args --log-level warn"

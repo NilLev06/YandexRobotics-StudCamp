@@ -1,0 +1,11 @@
+launch:
+- node:
+    pkg: "camera_ros"
+    exec: "camera_node"
+    name: "camera_node"
+    output: "log"
+    param:
+    # https://github.com/christianrauch/camera_ros#static-camera-stream-configuration
+    - { name: "width", value: 640 }
+    - { name: "height", value: 480 }
+    - { name: "camera_info_url", value: file://$(find-pkg-share main)/launch/camera_info.yaml }

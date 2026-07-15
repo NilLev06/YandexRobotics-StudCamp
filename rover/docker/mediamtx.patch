@@ -1,0 +1,24 @@
+diff --git a/internal/servers/webrtc/session.go b/internal/servers/webrtc/session.go
+index 925d0395..3e03ef9b 100644
+--- a/internal/servers/webrtc/session.go
++++ b/internal/servers/webrtc/session.go
+@@ -310,6 +310,10 @@ func (s *session) runRead() (int, error) {
+ 		return http.StatusInternalServerError, err
+ 	}
+ 
++	s.Log(logger.Info, "HOST header: %s", s.req.httpRequest.Host)
++	host, _, _ := net.SplitHostPort(s.req.httpRequest.Host)
++	additionalHosts := []string{host}
++
+ 	pc := &webrtc.PeerConnection{
+ 		UDPReadBufferSize:     s.udpReadBufferSize,
+ 		ICEUDPMux:             s.iceUDPMux,
+@@ -317,7 +321,7 @@ func (s *session) runRead() (int, error) {
+ 		ICEServers:            iceServers,
+ 		IPsFromInterfaces:     s.ipsFromInterfaces,
+ 		IPsFromInterfacesList: s.ipsFromInterfacesList,
+-		AdditionalHosts:       s.additionalHosts,
++		AdditionalHosts:       additionalHosts,
+ 		STUNGatherTimeout:     time.Duration(s.stunGatherTimeout),
+ 		Publish:               true,
+ 		Log:                   s,

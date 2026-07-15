@@ -1,0 +1,45 @@
+diff --git a/include/ld19_lidar/lipkg.h b/include/ld19_lidar/lipkg.h
+index b9832e9..8e265eb 100644
+--- a/include/ld19_lidar/lipkg.h
++++ b/include/ld19_lidar/lipkg.h
+@@ -11,6 +11,7 @@
+ #ifndef LD19_LIDAR_LIPKG
+ #define LD19_LIDAR_LIPKG
+ 
++#include <functional>
+ #include <stdint.h>
+ #include <vector>
+ #include <array>
+diff --git a/src/ld19_node.cpp b/src/ld19_node.cpp
+index 87462e0..e56618b 100644
+--- a/src/ld19_node.cpp
++++ b/src/ld19_node.cpp
+@@ -67,7 +67,7 @@ auto LD19Node::populate_message(const std::vector<PointData> & laser_data)->void
+   float angle_increment = ANGLE_TO_RADIAN(lidar_->GetSpeed() / 4500);
+   int max_index = std::ceil((ANGLE_MAX - ANGLE_MIN) / angle_increment);
+   output_.header.stamp = this->now();
+-  output_.angle_increment = angle_increment;
++  output_.angle_increment = M_PI * 2.0 / 453.0;
+   for (auto point : laser_data) {
+     float range = point.distance / 1000.0;
+     float angle = ANGLE_TO_RADIAN(point.angle);
+@@ -81,7 +81,7 @@ auto LD19Node::populate_message(const std::vector<PointData> & laser_data)->void
+     // front of the sensor
+     int index_offset = (int)map_range(M_PI / 2, 0, M_PI * 2.0, 0, max_index);  // 113;
+     index += index_offset;
+-    std::cout << "index_offset: " << index_offset << std::endl;
++    //std::cout << "index_offset: " << index_offset << std::endl;
+ 
+     if (index > max_index) {
+       index -= max_index;
+@@ -91,8 +91,8 @@ auto LD19Node::populate_message(const std::vector<PointData> & laser_data)->void
+     }
+ 
+     // int index = (int)((angle - output_.angle_min) / output_.angle_increment);
+-    std::cout << "max index:" << max_index << std::endl;
+-    std::cout << "deg: " << point.angle << " rads: " << angle << " index: " << index << std::endl;
++    //std::cout << "max index:" << max_index << std::endl;
++    //std::cout << "deg: " << point.angle << " rads: " << angle << " index: " << index << std::endl;
+     if (index >= 0 && index < max_index) {
+       output_.ranges[index] = range;
+       /*If the current content is Nan, it is assigned directly*/

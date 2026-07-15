@@ -1,0 +1,36 @@
+diff --git a/picamera2/picamera2.py b/picamera2/picamera2.py
+index 5e9f2fd..60bae75 100644
+--- a/picamera2/picamera2.py
++++ b/picamera2/picamera2.py
+@@ -28,7 +28,7 @@ import picamera2.utils as utils
+ from picamera2.allocators import DmaAllocator
+ from picamera2.encoders import Encoder, H264Encoder, MJPEGEncoder, Quality
+ from picamera2.outputs import FileOutput, PyavOutput
+-from picamera2.previews import DrmPreview, NullPreview, QtGlPreview, QtPreview
++from picamera2.previews import NullPreview
+ 
+ from .configuration import CameraConfiguration
+ from .controls import Controls
+@@ -49,9 +49,9 @@ class Preview(Enum):
+     """Enum that applications can pass to the start_preview method."""
+ 
+     NULL = NullPreview
+-    DRM = DrmPreview
+-    QT = QtPreview
+-    QTGL = QtGlPreview
++    # DRM = DrmPreview
++    # QT = QtPreview
++    # QTGL = QtGlPreview
+ 
+ 
+ class GlobalCameraInfo(TypedDict):
+diff --git a/picamera2/previews/__init__.py b/picamera2/previews/__init__.py
+index 83068ef..e9b817e 100644
+--- a/picamera2/previews/__init__.py
++++ b/picamera2/previews/__init__.py
+@@ -1,3 +1,3 @@
+-from .drm_preview import DrmPreview
++# from .drm_preview import DrmPreview
+ from .null_preview import NullPreview
+-from .qt_previews import QtGlPreview, QtPreview
++# from .qt_previews import QtGlPreview, QtPreview

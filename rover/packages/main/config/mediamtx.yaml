@@ -1,0 +1,21 @@
+# https://github.com/bluenviron/mediamtx/blob/main/mediamtx.yml
+
+rtsp: true
+rtspAddress: :8554
+
+webrtc: true
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+
+rtmp: false
+hls: false
+srt: false
+
+paths:
+  cam:
+    source: rpiCamera
+    sourceOnDemand: yes
+    rpiCameraWidth: 1280
+    rpiCameraHeight: 720
+    rpiCameraFPS: 30
+    rpiCameraBitrate: 2000000
