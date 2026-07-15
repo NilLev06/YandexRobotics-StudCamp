@@ -5,7 +5,7 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 import threading
-from threading import Lock
+import time
 
 
 class YoloDetectorNode(Node):
@@ -55,7 +55,8 @@ class YoloDetectorNode(Node):
     def _frame_reader(self):
         frame_read_errors = 0
         max_errors = 5
-        
+        reconnect_backoff_s = 1.0
+
         while self.running:
             ret, frame = self.cap.read()
             if not ret:
@@ -64,14 +65,20 @@ class YoloDetectorNode(Node):
                 if frame_read_errors >= max_errors:
                     self.get_logger().warn("Reconnecting to RTSP stream...")
                     self.cap.release()
+                    time.sleep(reconnect_backoff_s)
                     self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
                     frame_read_errors = 0
                     if not self.cap.isOpened():
                         self.get_logger().error("Reconnection failed")
+                        reconnect_backoff_s = min(reconnect_backoff_s * 2.0, 10.0)
+                    else:
+                        reconnect_backoff_s = 1.0
+                else:
+                    time.sleep(0.05)
                 continue
-            
+
             frame_read_errors = 0
-            
+
             # Store the latest frame
             self.latest_frame = frame
 

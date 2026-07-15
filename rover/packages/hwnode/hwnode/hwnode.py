@@ -26,7 +26,7 @@ CONTROL_HZ = 30
 ANGULAR_GAIN = 1.8
 LINEAR_GAIN = 2.0
 
-MIN_INPLACE_ANGULAR = 0.8
+MIN_INPLACE_ANGULAR = 0.3
 INPLACE_ANGULAR_THRESHOLD = 0.1
 INPLACE_LINEAR_THRESHOLD = 0.05
 
@@ -126,14 +126,28 @@ class HardwareNode(Node):
 
     def read_loop(self):
         buff = b""
+        crc_failures = 0
 
         while rclpy.ok():
             chunk = self.ser.read_until(b"\x7E")
-            if len(buff) + len(chunk) > Packet._size: buff = b""
             buff += chunk
-            # chunk = chunk.rstrip(b"\x7E")
+            if len(buff) > Packet._size:
+                # Resync on the last frame delimiter seen so far, discarding
+                # anything before it instead of just clearing on overflow.
+                last_delim = buff.rfind(b"\x7E", 0, len(buff) - 1)
+                buff = buff[last_delim:] if last_delim >= 0 else b""
+            if len(buff) != Packet._size:
+                continue
             packet = Packet.unpack(buff)
-            if packet is None: continue
+            buff = b""
+            if packet is None:
+                crc_failures += 1
+                if crc_failures % 50 == 1:
+                    self.get_logger().warning(
+                        f"discarded {crc_failures} malformed/CRC-invalid serial packets"
+                    )
+                continue
+            crc_failures = 0
             self.last_packet = packet
 
             now = self.get_clock().now().to_msg()
@@ -199,7 +213,6 @@ class HardwareNode(Node):
             w = 0.0
 
         self.target_v, self.target_w = v, w
-        print(self.target_v, self.target_w)
 
     def ramp(self, current, target, accel_step, decel_step):
         step = accel_step if abs(target) > abs(current) else decel_step
@@ -250,6 +263,11 @@ def main():
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    finally:
+        node.ser.close()
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

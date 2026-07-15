@@ -43,7 +43,11 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
     ports:
-      - "192.168.2.44:8091:8091"
+      # Bind on all interfaces instead of a hardcoded LAN IP so this survives
+      # a DHCP lease change; still LAN-only in practice since the rover has
+      # no public interface. See YOLO_LIVE.md for the unauthenticated-stream
+      # caveat.
+      - "${YOLO_LIVE_BIND_HOST:-0.0.0.0}:8091:8091"
     networks:
       - rover-main
     healthcheck:

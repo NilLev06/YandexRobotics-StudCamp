@@ -121,15 +121,21 @@ class GoalProxy(Node):
         # self.publish_status("Goal accepted")
         self.current_goal_handle = goal_handle
 
-        # Wait for the final result
+        # Wait for the final result. Bind this goal_handle into the callback so a
+        # late result for a since-superseded goal cannot clobber a newer handle.
         self.result_future = goal_handle.get_result_async()
-        self.result_future.add_done_callback(self.result_callback)
+        self.result_future.add_done_callback(
+            lambda future, handle=goal_handle: self.result_callback(future, handle)
+        )
 
-    def result_callback(self, future):
+    def result_callback(self, future, handle):
         """Callback when the action finishes (success, aborted, cancelled)."""
         result = future.result()
         status = result.status
-        self.current_goal_handle = None
+        # Only clear the active handle if it still belongs to this goal; a
+        # canceled goal's result can arrive after a newer goal was accepted.
+        if self.current_goal_handle is handle:
+            self.current_goal_handle = None
 
         # Publish final status
         if status == 4:          # GoalStatus.STATUS_SUCCEEDED

@@ -12,8 +12,6 @@ RPI_EEPROM_FREEZE_URL="https://github.com/raspberrypi/rpi-eeprom/raw/refs/heads/
 RPI_EEPROM_FREEZE_SOURCE="/tmp/pieeprom-2024-09-10.bin"
 RPI_EEPROM_FREEZE_CONFIG="/tmp/boot.conf"
 RPI_EEPROM_FREEZE_IMAGE="/tmp/pieeprom-freeze.bin"
-SUDOERS_FILE="/etc/sudoers.d/010_$USER-nopasswd"
-SUDOERS_CONTENT="$USER ALL=(ALL) NOPASSWD:ALL"
 
 
 NEEDS_REBOOT=false
@@ -175,23 +173,6 @@ configure_eeprom() {
     NEEDS_REBOOT=true
 }
 
-enable_passwordless_sudo() {
-    log_info "Настройка passwordless sudo для $USER"
-
-    if [ -f "$SUDOERS_FILE" ]; then
-        if sudo cat "$SUDOERS_FILE" 2>/dev/null | grep -q "^$SUDOERS_CONTENT$"; then
-            log_info "Passwordless sudo уже настроен для $USER"
-            return 0
-        fi
-    else
-        log_info "Создание файла sudoers для passwordless sudo для $USER"
-        echo "$SUDOERS_CONTENT" | sudo tee "$SUDOERS_FILE" > /dev/null
-        log_info "Passwordless sudo настроен для $USER"
-    fi
-
-    sudo chmod 440 "$SUDOERS_FILE"
-}
-
 clone_repository() {
     log_info "Проверка репозитория"
     
@@ -318,6 +299,15 @@ install_web_term_services() {
         chmod +x "$SETUP_DIR/ttyd"
     fi
 
+    local ttyd_password_file="$SETUP_DIR/ttyd_password"
+    if [ ! -s "$ttyd_password_file" ]; then
+        log_info "Generating a password for the web terminals"
+        (umask 077; openssl rand -base64 24 > "$ttyd_password_file")
+        log_warn "Web terminal password saved to $ttyd_password_file"
+        log_warn "Login: $USER / $(cat "$ttyd_password_file")"
+    fi
+    chmod 600 "$ttyd_password_file"
+
     local unit1="[Unit]
 Description=RBM Web Terminal (host)
 After=network.target
@@ -326,7 +316,7 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=/home/$USER
-ExecStart=$SETUP_DIR/ttyd -W -p 8100 tmux new -A -s webtmux bash
+ExecStart=/bin/bash -c '$SETUP_DIR/ttyd -W -c $USER:\$(cat $ttyd_password_file) -p 8100 tmux new -A -s webtmux bash'
 Restart=always
 RestartSec=10
 
@@ -343,7 +333,7 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=/home/$USER
-ExecStart=$SETUP_DIR/ttyd -W -p 8200 docker exec -it ros tmux new -A -s main bash
+ExecStart=/bin/bash -c '$SETUP_DIR/ttyd -W -c $USER:\$(cat $ttyd_password_file) -p 8200 docker exec -it ros tmux new -A -s main bash'
 Restart=always
 RestartSec=10
 
@@ -356,7 +346,6 @@ WantedBy=multi-user.target"
 main() {
     log_info "=== НАЧАЛО НАСТРОЙКИ RASPBERRY ==="
 
-    enable_passwordless_sudo
     install_docker
     install_platformio_udev
     install_platformio_tools
