@@ -32,7 +32,7 @@
   "safety_validation": {
     "measured_chassis_swept_radius_m": null,
     "lidar_bearing_validated": false,
-    "scan_plane_intersects_floor_bottle": false,
+    "scan_plane_intersects_floor_target": false,
     "supervised_standoff_trials": 0
   },
   "association": {

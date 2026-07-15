@@ -45,10 +45,10 @@ later scene. The service accepts up to four simultaneous MJPEG viewers.
 
 `/health` also exposes each fresh detection's class, confidence, pixel bounding
 box, center, inference sequence, image size, and source/completion timestamps.
-The guarded bottle-search sidecar uses those structured fields; the annotated
+The guarded object-search sidecar uses those structured fields; the annotated
 JPEG alone is not used for control.
 
-See `BOTTLE_SEARCH.md` for the launchable step-and-stare search workflow and
+See `OBJECT_SEARCH.md` for the launchable step-and-stare search workflow and
 the calibration gates that intentionally block autonomous approach on the
 current hardware setup.
 

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Fail-closed bottle search and optional lidar-assisted approach for RoboMarvel.
+"""Fail-closed object search and optional lidar-assisted approach for RoboMarvel.
 
-The node deliberately uses Nav2 actions instead of commanding rotational velocity.
-Approach mode is locked until an explicit, validated camera/lidar calibration is
-mounted.  Exit status 2 is reserved for one very specific outcome: every step of
-a complete 360 degree search succeeded and no bottle was confirmed.
+The target class (any YOLO/COCO label, e.g. "bottle" or "chair") is passed via
+--target-class. The node deliberately uses Nav2 actions instead of commanding
+rotational velocity. Approach mode is locked until an explicit, validated
+camera/lidar calibration is mounted. Exit status 2 is reserved for one very
+specific outcome: every step of a complete 360 degree search succeeded and the
+target object was never confirmed.
 """
 
 from __future__ import annotations
@@ -259,7 +261,7 @@ def load_calibration(path: str, image_width: int, image_height: int) -> Calibrat
     safety = payload.get("safety_validation") or {}
     required_true = (
         "lidar_bearing_validated",
-        "scan_plane_intersects_floor_bottle",
+        "scan_plane_intersects_floor_target",
     )
     missing_safety = [name for name in required_true if safety.get(name) is not True]
     if missing_safety:
@@ -389,7 +391,7 @@ def load_calibration(path: str, image_width: int, image_height: int) -> Calibrat
 
 class BottleSearchNode(Node):
     def __init__(self, args: argparse.Namespace) -> None:
-        super().__init__("z_boys_bottle_search")
+        super().__init__("z_boys_object_search")
         self.args = args
         self.stop_requested = threading.Event()
         self._lock = threading.Lock()
@@ -686,26 +688,27 @@ class BottleSearchNode(Node):
                 return payload
         raise UnsafeError(f"YOLO inference is not live: {last_error}")
 
-    def _bottles_from_health(
+    def _targets_from_health(
         self, payload: dict[str, Any]
     ) -> list[BottleObservation]:
         seq, width, height = self._validate_health(payload)
+        target_class = self.args.target_class.lower()
         observations: list[BottleObservation] = []
         for item in payload["detections"]:
-            if not isinstance(item, dict) or str(item.get("class", "")).lower() != "bottle":
+            if not isinstance(item, dict) or str(item.get("class", "")).lower() != target_class:
                 continue
             try:
                 confidence = float(item["confidence"])
                 bbox_values = tuple(float(value) for value in item["bbox_xyxy"])
             except (KeyError, TypeError, ValueError) as exc:
-                raise UnsafeError("YOLO bottle detection has a malformed bbox") from exc
+                raise UnsafeError("YOLO target detection has a malformed bbox") from exc
             if len(bbox_values) != 4 or not all(
                 math.isfinite(value) for value in bbox_values
             ):
-                raise UnsafeError("YOLO bottle bbox is invalid")
+                raise UnsafeError("YOLO target bbox is invalid")
             x1, y1, x2, y2 = bbox_values
             if not math.isfinite(confidence):
-                raise UnsafeError("YOLO bottle confidence is non-finite")
+                raise UnsafeError("YOLO target confidence is non-finite")
             if (
                 confidence < self.args.detection_confidence
                 or x1 < 0.0
@@ -721,7 +724,7 @@ class BottleSearchNode(Node):
             )
         return observations
 
-    def _confirm_bottle(
+    def _confirm_target(
         self, baseline_seq: Optional[int], timeout_s: float
     ) -> Optional[BottleObservation]:
         deadline = time.monotonic() + timeout_s
@@ -737,15 +740,15 @@ class BottleSearchNode(Node):
                     continue
                 seen_sequences.add(seq)
                 valid_sequences += 1
-                bottles = self._bottles_from_health(payload)
+                targets = self._targets_from_health(payload)
             except UnsafeError as exc:
                 self.get_logger().warning(f"YOLO stare sample rejected: {exc}")
                 time.sleep(0.15)
                 continue
-            if not bottles:
+            if not targets:
                 track = []
             else:
-                best = max(bottles, key=lambda item: item.confidence)
+                best = max(targets, key=lambda item: item.confidence)
                 if track and _bbox_similar(track[-1], best):
                     track.append(best)
                 else:
@@ -753,8 +756,8 @@ class BottleSearchNode(Node):
                 if len(track) >= self.args.detection_confirmations:
                     confirmed = _average_observations(track)
                     self.get_logger().info(
-                        f"confirmed bottle in {len(track)} distinct inference frames "
-                        f"(confidence >= {confirmed.confidence:.2f})"
+                        f"confirmed {self.args.target_class} in {len(track)} distinct "
+                        f"inference frames (confidence >= {confirmed.confidence:.2f})"
                     )
                     return confirmed
             time.sleep(0.10)
@@ -1083,7 +1086,7 @@ class BottleSearchNode(Node):
             projected.append((index, distance, x_base, y_base, pixel[0]))
         if len(projected) < calibration.association.min_lidar_points:
             raise UnsafeError(
-                f"only {len(projected)} lidar points project into the bottle bbox"
+                f"only {len(projected)} lidar points project into the target bbox"
             )
 
         projected.sort(key=lambda item: item[0])
@@ -1129,7 +1132,7 @@ class BottleSearchNode(Node):
                 (score, LidarTarget(x_base, y_base, range_base, bearing, len(group)))
             )
         if not candidates:
-            raise UnsafeError("no compact forward lidar cluster matches the bottle bbox")
+            raise UnsafeError("no compact forward lidar cluster matches the target bbox")
         candidates.sort(key=lambda item: item[0])
         if len(candidates) > 1 and candidates[1][0] - candidates[0][0] < 0.10:
             raise UnsafeError("lidar association is ambiguous between multiple clusters")
@@ -1189,7 +1192,7 @@ class BottleSearchNode(Node):
     def _navigate_to_target(self, target: LidarTarget) -> None:
         approach_distance = target.range_m - self.args.standoff_m
         if approach_distance <= 0.08:
-            self.get_logger().info("already within configured bottle standoff")
+            self.get_logger().info("already within configured target standoff")
             return
         if approach_distance > self.args.max_approach_m:
             raise UnsafeError(
@@ -1225,7 +1228,7 @@ class BottleSearchNode(Node):
             self.navigate_cancel_client,
             goal,
             self.args.goal_timeout_s,
-            "bottle approach",
+            "target approach",
             lambda: self._sensor_guard_reason(self.args.guardian_clearance_m),
         )
 
@@ -1259,12 +1262,12 @@ class BottleSearchNode(Node):
         steps = math.ceil(360.0 / self.args.step_deg)
         step_radians = 2.0 * math.pi / steps
         stare_timeout = max(3.0, self.args.detection_confirmations * 1.25)
-        saw_visual_bottle = False
+        saw_visual_target = False
 
         baseline_seq = self._current_yolo_seq()
-        observation = self._confirm_bottle(baseline_seq, stare_timeout)
+        observation = self._confirm_target(baseline_seq, stare_timeout)
         if observation is not None:
-            saw_visual_bottle = True
+            saw_visual_target = True
             if self.args.search_only:
                 return EXIT_OK
             assert calibration is not None
@@ -1273,7 +1276,7 @@ class BottleSearchNode(Node):
                 self._navigate_to_target(target)
                 return EXIT_OK
             except UnsafeError as exc:
-                self.get_logger().warning(f"initial bottle rejected for approach: {exc}")
+                self.get_logger().warning(f"initial target rejected for approach: {exc}")
 
         completed_steps = 0
         measured_rotation = 0.0
@@ -1299,10 +1302,10 @@ class BottleSearchNode(Node):
                 )
             measured_rotation += measured_step
             baseline_seq = self._current_yolo_seq()
-            observation = self._confirm_bottle(baseline_seq, stare_timeout)
+            observation = self._confirm_target(baseline_seq, stare_timeout)
             if observation is None:
                 continue
-            saw_visual_bottle = True
+            saw_visual_target = True
             if self.args.search_only:
                 return EXIT_OK
             assert calibration is not None
@@ -1312,7 +1315,7 @@ class BottleSearchNode(Node):
                 return EXIT_OK
             except UnsafeError as exc:
                 self.get_logger().warning(
-                    f"bottle at search step {index} rejected for approach: {exc}"
+                    f"target at search step {index} rejected for approach: {exc}"
                 )
 
         if completed_steps != steps:
@@ -1323,12 +1326,12 @@ class BottleSearchNode(Node):
                 f"search actions completed, but odometry measured only "
                 f"{math.degrees(measured_rotation):.1f} degrees of rotation"
             )
-        if saw_visual_bottle:
+        if saw_visual_target:
             raise UnsafeError(
-                "bottle was visually detected, but no safe lidar association was found"
+                "target was visually detected, but no safe lidar association was found"
             )
         self.get_logger().info(
-            "completed a full 360 degree search with no confirmed bottle "
+            "completed a full 360 degree search with no confirmed target "
             f"(odometry={math.degrees(measured_rotation):.1f} degrees)"
         )
         return EXIT_NOT_FOUND
@@ -1336,17 +1339,22 @@ class BottleSearchNode(Node):
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = SafeArgumentParser(
-        description="Guarded Nav2 bottle search with calibration-locked approach"
+        description="Guarded Nav2 object search with calibration-locked approach"
+    )
+    parser.add_argument(
+        "--target-class",
+        required=True,
+        help="YOLO/COCO class name to search for, e.g. bottle, chair, cup",
     )
     parser.add_argument("--dry-run", action="store_true", help="preflight only")
     parser.add_argument(
-        "--search-only", action="store_true", help="find a bottle but never approach"
+        "--search-only", action="store_true", help="find the target but never approach"
     )
     parser.add_argument(
         "--yolo-url", default="http://z-boys-yolo-live:8091/health"
     )
     parser.add_argument(
-        "--calibration", default="/app/bottle_search_calibration.json"
+        "--calibration", default="/app/search_calibration.json"
     )
     parser.add_argument("--step-deg", type=float, default=15.0)
     parser.add_argument("--min-clearance-m", type=float, default=0.35)
@@ -1412,6 +1420,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
             parser.error(message)
     if not args.yolo_url.startswith("http://"):
         parser.error("--yolo-url must be an http:// URL on the rover network")
+    args.target_class = args.target_class.strip()
+    if not args.target_class or "/" in args.target_class:
+        parser.error("--target-class must be a non-empty class name")
     for attribute in ("scan_topic", "odom_topic", "battery_topic"):
         if not getattr(args, attribute).startswith("/"):
             parser.error(f"--{attribute.replace('_', '-')} must be an absolute topic")
@@ -1430,7 +1441,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     executor = MultiThreadedExecutor(num_threads=3)
     executor.add_node(node)
     executor_thread = threading.Thread(
-        target=executor.spin, name="bottle-search-ros", daemon=True
+        target=executor.spin, name="object-search-ros", daemon=True
     )
     executor_thread.start()
 

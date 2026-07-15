@@ -1,33 +1,39 @@
 #!/usr/bin/env bash
-# Launch the guarded bottle-search behavior without modifying the main rover tree.
+# Launch the guarded object-search behavior without modifying the main rover tree.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-DEFAULT_CALIBRATION="$SCRIPT_DIR/../config/bottle_search_calibration.json"
-IMAGE="${BOTTLE_SEARCH_IMAGE:-registry.robotics-lab.ru/robomarvel:v6}"
-CONTAINER_NAME="z-boys-bottle-search"
-NETWORK="${BOTTLE_SEARCH_NETWORK:-robomarvel_default}"
-WAV_FILE="${BOTTLE_SEARCH_WAV:-/tmp/bottle-not-found.wav}"
+DEFAULT_CALIBRATION="$SCRIPT_DIR/../config/search_calibration.json"
+DEFAULT_TARGET_FILE="$SCRIPT_DIR/../config/target.txt"
+IMAGE="${OBJECT_SEARCH_IMAGE:-registry.robotics-lab.ru/robomarvel:v6}"
+CONTAINER_NAME="z-boys-object-search"
+NETWORK="${OBJECT_SEARCH_NETWORK:-robomarvel_default}"
+WAV_FILE="${OBJECT_SEARCH_WAV:-/tmp/object-not-found.wav}"
 CALIBRATION_FILE="$DEFAULT_CALIBRATION"
+TARGET_FILE="$DEFAULT_TARGET_FILE"
+TARGET_CLASS=""
 BEHAVIOR_ARGS=()
 
 usage() {
   cat <<'EOF'
-Usage: run_bottle_search.sh [launcher options] [behavior options]
+Usage: run_object_search.sh [launcher options] [behavior options]
 
 Launcher options:
   --wav FILE           WAV played only after a completed 360-degree no-find
   --calibration FILE   Calibration JSON mounted read-only into the behavior
-  -h, --help           Show this help and the behavior options
+  --target FILE        File containing the target class name (default:
+                        config/target.txt); overridden by --target-class
+  -h, --help            Show this help and the behavior options
 
 Useful behavior options:
+  --target-class NAME  YOLO/COCO class to search for (overrides --target file)
   --dry-run            Run every preflight without sending a motion goal
-  --search-only        Stop safely after confirming a bottle; do not approach
+  --search-only        Stop safely after confirming the target; do not approach
   --step-deg N         Step-and-stare angle (default: 15)
   --min-clearance-m M  Required all-around spin clearance (default: 0.35)
 
-All other arguments are passed to bottle_search.py.
+All other arguments are passed to object_search.py.
 EOF
 }
 
@@ -49,6 +55,22 @@ while (($#)); do
       CALIBRATION_FILE="$2"
       shift 2
       ;;
+    --target)
+      if (($# < 2)); then
+        echo "ERROR: --target needs a file path" >&2
+        exit 64
+      fi
+      TARGET_FILE="$2"
+      shift 2
+      ;;
+    --target-class)
+      if (($# < 2)); then
+        echo "ERROR: --target-class needs a value" >&2
+        exit 64
+      fi
+      TARGET_CLASS="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -66,8 +88,14 @@ fail() {
 }
 
 command -v docker >/dev/null 2>&1 || fail "docker is not installed"
-[[ -r "$SCRIPT_DIR/bottle_search.py" ]] || fail "missing $SCRIPT_DIR/bottle_search.py"
+[[ -r "$SCRIPT_DIR/object_search.py" ]] || fail "missing $SCRIPT_DIR/object_search.py"
 [[ -r "$CALIBRATION_FILE" ]] || fail "missing calibration file: $CALIBRATION_FILE"
+
+if [[ -z "$TARGET_CLASS" ]]; then
+  [[ -r "$TARGET_FILE" ]] || fail "missing target file: $TARGET_FILE (or pass --target-class)"
+  TARGET_CLASS="$(tr -d '[:space:]' < "$TARGET_FILE")"
+  [[ -n "$TARGET_CLASS" ]] || fail "target file $TARGET_FILE is empty"
+fi
 
 DASHBOARD_STATE="$(systemctl is-active rbm-web-tests.service 2>/dev/null || true)"
 case "$DASHBOARD_STATE" in
@@ -105,12 +133,12 @@ fi
 interrupted=0
 stop_behavior() {
   interrupted=1
-  echo "Stopping bottle-search container..." >&2
+  echo "Stopping object-search container..." >&2
   docker stop --time 8 "$CONTAINER_NAME" >/dev/null 2>&1 || true
 }
 trap stop_behavior INT TERM HUP
 
-echo "Launching guarded bottle search. Motion remains disabled unless every safety gate passes."
+echo "Launching guarded search for '$TARGET_CLASS'. Motion remains disabled unless every safety gate passes."
 docker run --rm --init \
   --name "$CONTAINER_NAME" \
   --network "$NETWORK" \
@@ -125,12 +153,13 @@ docker run --rm --init \
   -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e ROS_DOMAIN_ID=0 \
   -e ROS_LOG_DIR=/tmp \
-  -v "$SCRIPT_DIR/bottle_search.py:/app/bottle_search.py:ro" \
-  -v "$CALIBRATION_FILE:/app/bottle_search_calibration.json:ro" \
+  -v "$SCRIPT_DIR/object_search.py:/app/object_search.py:ro" \
+  -v "$CALIBRATION_FILE:/app/search_calibration.json:ro" \
   --entrypoint /usr/bin/python3 \
   "$IMAGE" \
-  -u /app/bottle_search.py \
-  --calibration /app/bottle_search_calibration.json \
+  -u /app/object_search.py \
+  --calibration /app/search_calibration.json \
+  --target-class "$TARGET_CLASS" \
   "${BEHAVIOR_ARGS[@]}"
 STATUS=$?
 
@@ -141,10 +170,10 @@ fi
 
 case "$STATUS" in
   0)
-    echo "Bottle-search behavior completed successfully."
+    echo "Object-search behavior completed successfully."
     ;;
   2)
-    echo "A complete 360-degree search found no confirmed bottle; playing $WAV_FILE"
+    echo "A complete 360-degree search found no confirmed '$TARGET_CLASS'; playing $WAV_FILE"
     if ! command -v aplay >/dev/null 2>&1; then
       echo "ERROR: aplay is unavailable; cannot play the no-find WAV" >&2
       exit 1
@@ -155,7 +184,7 @@ case "$STATUS" in
     fi
     ;;
   *)
-    echo "Bottle search stopped with status $STATUS; no no-find audio was played." >&2
+    echo "Object search stopped with status $STATUS; no no-find audio was played." >&2
     ;;
 esac
 
