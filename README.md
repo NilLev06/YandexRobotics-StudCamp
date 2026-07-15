@@ -1,74 +1,74 @@
-# RoboMarvel rover — object search
+# RoboMarvel rover — поиск объекта
 
-A ROS 2 (Jazzy) rover that finds a named object (currently a fixed word, later
-by voice) using YOLO and a lidar-guarded search/approach behavior. This is a
-sidecar tree: it runs alongside the main `robomarvel` project without editing
-or mounting it, on the same Docker network.
+Ровер на ROS 2 (Jazzy), который ищет заданный объект (пока — по фиксированному
+слову, позже — по голосу) с помощью YOLO и safety-gated поведения
+поиска/подъезда с лидаром. Это сайдкар-проект: работает рядом с основным
+проектом `robomarvel`, не редактируя и не монтируя его, в той же Docker-сети.
 
-## Structure
+## Структура
 
 ```
-rover/
+.
 ├── config/
-│   ├── target.txt                 # current search target, one word (e.g. "bottle")
-│   └── search_calibration.json    # camera<->lidar calibration; approach is
-│                                   # locked out until this is measured and validated
-├── packages/                      # ROS 2 packages, built with colcon
-│   ├── main/                      # bringup, Nav2 launch/config, goal_proxy
-│   ├── hwnode/                    # serial link to the motor controller/IMU/battery
-│   ├── detection/                 # in-tree YOLO detector node (compressed image topic)
-│   └── voice/                     # STT/TTS nodes (not yet wired into search)
+│   ├── target.txt                 # текущая цель поиска, одно слово (например "bottle")
+│   └── search_calibration.json    # калибровка камера<->лидар; подъезд
+│                                   # заблокирован, пока это не измерено и не подтверждено
+├── packages/                      # ROS 2 пакеты, собираются через colcon
+│   ├── main/                      # bringup, launch/конфиг Nav2, goal_proxy
+│   ├── hwnode/                    # serial-связь с контроллером моторов/IMU/батареей
+│   ├── detection/                 # встроенная нода YOLO-детектора (топик сжатого изображения)
+│   └── voice/                     # ноды STT/TTS (пока не подключены к поиску)
 ├── scripts/
-│   ├── object_search.py           # guarded search-and-approach behavior (see below)
-│   ├── run_object_search.sh       # host-side launcher for object_search.py
-│   ├── yolo_live_mjpeg.py         # camera overlay sidecar (MJPEG + /health + ROS topic)
-│   └── setup.sh                   # first-time Raspberry Pi provisioning
-├── docker/                        # patches applied to upstream ROS packages at build time
-├── Dockerfile                     # main `ros` image (ROS 2 + OpenCV + Ultralytics + Nav2 + SLAM)
-├── docker-compose.yaml            # full privileged rover stack (main `ros` container)
-├── docker-compose.yolo-live.yaml  # YOLO camera-overlay sidecar only
-├── entrypoint.sh                  # main container's startup (colcon build, tmuxp autostart)
-├── OBJECT_SEARCH.md               # how to run the guarded search, safety notes
-└── YOLO_LIVE.md                   # how to run/use the camera overlay stream
+│   ├── object_search.py           # guarded-поведение поиска и подъезда (см. ниже)
+│   ├── run_object_search.sh       # хостовый лаунчер для object_search.py
+│   ├── yolo_live_mjpeg.py         # сайдкар оверлея камеры (MJPEG + /health + ROS-топик)
+│   └── setup.sh                   # первичная настройка Raspberry Pi
+├── docker/                        # патчи, применяемые к сторонним ROS-пакетам при сборке
+├── Dockerfile                     # основной образ `ros` (ROS 2 + OpenCV + Ultralytics + Nav2 + SLAM)
+├── docker-compose.yaml            # полный привилегированный стек ровера (основной контейнер `ros`)
+├── docker-compose.yolo-live.yaml  # только сайдкар YOLO-оверлея камеры
+├── entrypoint.sh                  # старт основного контейнера (colcon build, tmuxp autostart)
+├── OBJECT_SEARCH.md               # как запускать guarded-поиск, заметки по безопасности
+└── YOLO_LIVE.md                   # как запускать/использовать стрим оверлея камеры
 ```
 
-## How it fits together
+## Как это работает вместе
 
 ```
 config/target.txt  ──►  run_object_search.sh  ──►  object_search.py
                                                           │
-                                    reads /health from    │  Nav2 Spin / NavigateToPose
+                                    читает /health из     │  Nav2 Spin / NavigateToPose
                                     yolo_live_mjpeg.py ◄──┘         │
-                                    (any COCO class)                ▼
+                                    (любой класс COCO)              ▼
                                                                  hwnode.py
-                                                            (serial → motors)
+                                                            (serial → моторы)
 ```
 
-- **`yolo_live_mjpeg.py`** runs continuously in its own container
-  (`docker-compose.yolo-live.yaml`) and exposes every detection it sees — not
-  just the current target — over `/health` (JSON) and as an MJPEG stream at
-  `http://<rover-ip>:8091/`.
-- **`config/target.txt`** holds the one word the rover is currently looking
-  for. Edit it by hand for now; a future voice node writes here instead.
-- **`object_search.py`** is a short-lived, sandboxed container
-  (`run_object_search.sh`) that runs preflight safety checks (battery, lidar
-  clearance, fresh sensor data), spins the rover in small steps looking for
-  the target class, and — only if calibration is validated — approaches it
-  via Nav2. See [OBJECT_SEARCH.md](OBJECT_SEARCH.md) for the full safety
-  model and run instructions.
-- **`hwnode.py`** is the only thing that talks to the motor controller over
-  serial; everything else commands motion through ROS topics/actions.
+- **`yolo_live_mjpeg.py`** работает постоянно в своём контейнере
+  (`docker-compose.yolo-live.yaml`) и отдаёт все детекции, которые видит — не
+  только текущую цель — через `/health` (JSON) и как MJPEG-стрим по адресу
+  `http://<ip-ровера>:8091/`.
+- **`config/target.txt`** содержит одно слово — что ровер сейчас ищет.
+  Пока редактируется руками; в будущем сюда будет писать голосовая нода.
+- **`object_search.py`** — короткоживущий изолированный контейнер
+  (`run_object_search.sh`), который проходит preflight-проверки безопасности
+  (батарея, клиренс лидара, свежесть данных сенсоров), крутит ровер малыми
+  шагами в поиске целевого класса и — только если калибровка подтверждена —
+  подъезжает к нему через Nav2. Полную модель безопасности и инструкции по
+  запуску см. в [OBJECT_SEARCH.md](OBJECT_SEARCH.md).
+- **`hwnode.py`** — единственное, что говорит с контроллером моторов по
+  serial; всё остальное командует движением через ROS-топики/actions.
 
-## Quick start
+## Быстрый старт
 
 ```sh
-# on the rover, inside this directory
+# на ровере, внутри этой директории
 docker start ros
-docker compose -f docker-compose.yolo-live.yaml up -d   # camera overlay
+docker compose -f docker-compose.yolo-live.yaml up -d   # оверлей камеры
 echo "bottle" > config/target.txt
-./scripts/run_object_search.sh --dry-run --search-only  # preflight only
-./scripts/run_object_search.sh --search-only            # actually search
+./scripts/run_object_search.sh --dry-run --search-only  # только preflight
+./scripts/run_object_search.sh --search-only            # реальный поиск
 ```
 
-See [OBJECT_SEARCH.md](OBJECT_SEARCH.md) and [YOLO_LIVE.md](YOLO_LIVE.md) for
-details, safety gates, and exit codes.
+Подробности, safety-гейты и коды завершения — в [OBJECT_SEARCH.md](OBJECT_SEARCH.md)
+и [YOLO_LIVE.md](YOLO_LIVE.md).
