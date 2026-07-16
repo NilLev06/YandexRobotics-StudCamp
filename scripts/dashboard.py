@@ -78,7 +78,7 @@ PAGE = """<!doctype html>
     <div class="card"><h2>Свободно на диске, ГБ</h2><div class="stat" id="disk-stat">—</div><canvas id="disk-chart"></canvas></div>
     <div class="card"><h2>Измеренная скорость (одометрия)</h2><div class="stat" id="speed-stat">—</div><div class="sub" id="speed-sub">по колёсным энкодерам, не по IMU — см. пояснение ниже</div></div>
     <div class="card"><h2>Команда движения</h2><div class="stat" id="cmdvel-stat">—</div><div class="sub" id="cmdvel-sub"></div></div>
-    <div class="card"><h2>IMU: угловая скорость, &deg;/с</h2><div class="stat" id="imu-stat">—</div><div class="sub">гироскоп; акселерометр на этом роверe не подключён — линейную скорость по IMU честно посчитать нельзя</div></div>
+    <div class="card"><h2>IMU: угловая скорость, &deg;/с</h2><div class="stat" id="imu-stat">—</div><div class="sub">гироскоп; акселерометр на плате есть, но не откалиброван и не публикуется в ROS — линейную скорость по IMU сейчас честно посчитать нельзя</div></div>
     <div class="card"><h2>Wi-Fi, дБм</h2><div class="stat" id="wifi-stat">—</div><canvas id="wifi-chart"></canvas></div>
     <div class="card"><h2>Видит YOLO</h2><div id="yolo-badges">—</div><div class="sub" id="yolo-sub"></div></div>
     <div class="card"><h2>Статус цели</h2><div class="stat" id="goal-stat" style="font-size:16px">—</div></div>
