@@ -1,4 +1,4 @@
-# Лёгкая веб-панель с графиками (батарея, температура, лидар, диск, Wi-Fi,
+# Лёгкая веб-панель с графиками (батарея, температура, лидар, диск,
 # что видит YOLO, статус текущей цели навигации). Никакого Prometheus/Grafana —
 # один процесс, история держится в памяти, графики рисуются в браузере.
 
@@ -26,7 +26,6 @@ services:
       DASHBOARD_PORT: "8092"
       DASHBOARD_YOLO_URL: http://z-boys-yolo-live:8091/health
       DASHBOARD_DISK_PATH: /host-root
-      DASHBOARD_WIFI_PATH: /run/rover-wifi-dbm
     entrypoint:
       - /root/venv/bin/python
       - -u
@@ -35,11 +34,6 @@ services:
       - ./scripts/dashboard.py:/app/dashboard.py:ro
       # read-only bind so the disk-free reading matches the host, not the container overlay
       - /:/host-root:ro
-      # Wi-Fi signal: docker/runc refuses to bind-mount anything under /proc
-      # directly ("proc-safety" check), so a host-side timer
-      # (scripts/host_wifi_probe.sh via rbm-wifi-probe.timer) writes the
-      # parsed value to this plain file instead, which mounts fine.
-      - /run/rover-wifi-dbm:/run/rover-wifi-dbm:ro
     tmpfs:
       - /tmp:size=16m,mode=1777
     ports:

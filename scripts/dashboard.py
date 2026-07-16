@@ -49,9 +49,13 @@ PAGE = """<!doctype html>
 <style>
   :root { color-scheme: dark; font-family: system-ui, sans-serif; }
   body { margin: 0; background: #0b0f14; color: #e8edf3; }
-  main { max-width: 1100px; margin: auto; padding: 12px 16px 40px; }
+  main { max-width: 1500px; margin: auto; padding: 12px 16px 40px; }
   h1 { font-size: 20px; margin: 16px 0; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .camera { flex: 1 1 380px; max-width: 480px; background: #121822; border-radius: 10px; padding: 10px; }
+  .camera h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8793a1; margin: 0 0 8px; }
+  .camera img { width: 100%; border-radius: 6px; display: block; background: #05070a; }
+  .grid { flex: 2 1 600px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
   .card { background: #121822; border-radius: 10px; padding: 12px 14px; }
   .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8793a1; margin: 0 0 8px; }
   .stat { font-size: 26px; font-weight: 600; }
@@ -69,19 +73,21 @@ PAGE = """<!doctype html>
 <body>
 <main>
   <h1>RoboMarvel &middot; панель ровера <span id="status"></span></h1>
+  <div class="layout">
+  <div class="camera"><h2>Камера + YOLO</h2><img id="cam" alt="камера ровера"></div>
   <div class="grid">
     <div class="card"><h2>Батарея, В</h2><div class="stat" id="battery-stat">—</div><canvas id="battery-chart"></canvas></div>
     <div class="card"><h2>Температура CPU, &deg;C</h2><div class="stat" id="temp-stat">—</div><canvas id="temp-chart"></canvas></div>
-    <div class="card"><h2>Нагрузка CPU (1 мин)</h2><div class="stat" id="cpuload-stat">—</div><canvas id="cpuload-chart"></canvas></div>
+    <div class="card"><h2>Загрузка CPU, %</h2><div class="stat" id="cpuload-stat">—</div><canvas id="cpuload-chart"></canvas></div>
     <div class="card"><h2>Память занято, %</h2><div class="stat" id="mem-stat">—</div><canvas id="mem-chart"></canvas></div>
     <div class="card"><h2>Лидар: клиренс / дальний край, м</h2><div class="stat" id="lidar-stat">—</div><div class="sub" id="lidar-sub"></div><canvas id="lidar-chart"></canvas></div>
     <div class="card"><h2>Свободно на диске, ГБ</h2><div class="stat" id="disk-stat">—</div><canvas id="disk-chart"></canvas></div>
     <div class="card"><h2>Измеренная скорость (одометрия)</h2><div class="stat" id="speed-stat">—</div><div class="sub" id="speed-sub">с платы моторного контроллера, не по IMU — см. пояснение ниже</div></div>
     <div class="card"><h2>Команда движения</h2><div class="stat" id="cmdvel-stat">—</div><div class="sub" id="cmdvel-sub"></div></div>
     <div class="card"><h2>IMU: угловая скорость, &deg;/с</h2><div class="stat" id="imu-stat">—</div><div class="sub">гироскоп; акселерометр на плате есть, но не откалиброван и не публикуется в ROS — линейную скорость по IMU сейчас честно посчитать нельзя</div></div>
-    <div class="card"><h2>Wi-Fi, дБм</h2><div class="stat" id="wifi-stat">—</div><canvas id="wifi-chart"></canvas></div>
     <div class="card"><h2>Видит YOLO</h2><div id="yolo-badges">—</div><div class="sub" id="yolo-sub"></div></div>
     <div class="card"><h2>Статус цели</h2><div class="stat" id="goal-stat" style="font-size:16px">—</div></div>
+  </div>
   </div>
 </main>
 <script>
@@ -100,11 +106,10 @@ function makeChart(id, label, color) {
 }
 makeChart('battery-chart', 'В', '#38d996');
 makeChart('temp-chart', '°C', '#f6b73c');
-makeChart('cpuload-chart', 'load', '#7f77dd');
+makeChart('cpuload-chart', '%', '#7f77dd');
 makeChart('mem-chart', '%', '#d45387');
 makeChart('lidar-chart', 'м', '#7cc7ff');
 makeChart('disk-chart', 'ГБ', '#c792ea');
-makeChart('wifi-chart', 'дБм', '#ff9f68');
 
 function pushSeries(id, points) {
   const chart = charts[id];
@@ -133,9 +138,9 @@ async function update() {
       s.cpu_temp_c == null ? '' : (s.cpu_temp_c > 75 ? 'bad' : (s.cpu_temp_c > 65 ? 'warn' : 'ok')));
     pushSeries('temp-chart', s.history.cpu_temp_c);
 
-    setStat('cpuload-stat', s.cpu_load1 == null ? '—' : s.cpu_load1.toFixed(2),
-      s.cpu_load1 == null ? '' : (s.cpu_load1 > s.cpu_count ? 'bad' : (s.cpu_load1 > s.cpu_count * 0.7 ? 'warn' : 'ok')));
-    pushSeries('cpuload-chart', s.history.cpu_load1);
+    setStat('cpuload-stat', s.cpu_percent == null ? '—' : s.cpu_percent.toFixed(0),
+      s.cpu_percent == null ? '' : (s.cpu_percent > 95 ? 'bad' : (s.cpu_percent > 80 ? 'warn' : 'ok')));
+    pushSeries('cpuload-chart', s.history.cpu_percent);
 
     setStat('mem-stat', s.mem_used_pct == null ? '—' : s.mem_used_pct.toFixed(0),
       s.mem_used_pct == null ? '' : (s.mem_used_pct > 90 ? 'bad' : (s.mem_used_pct > 75 ? 'warn' : 'ok')));
@@ -150,8 +155,6 @@ async function update() {
       s.disk_free_gb == null ? '' : (s.disk_free_gb < 2 ? 'bad' : (s.disk_free_gb < 5 ? 'warn' : 'ok')));
     pushSeries('disk-chart', s.history.disk_free_gb);
 
-    setStat('wifi-stat', s.wifi_dbm == null ? '—' : s.wifi_dbm.toFixed(0));
-    pushSeries('wifi-chart', s.history.wifi_dbm);
 
     const v = s.cmd_vel;
     setStat('cmdvel-stat', v ? `v=${v.linear.toFixed(2)} м/с  ω=${v.angular.toFixed(2)} рад/с` : 'стоит');
@@ -182,6 +185,9 @@ async function update() {
     document.getElementById('status').textContent = 'офлайн';
   }
 }
+// YOLO sidecar is a separate container on port 8091, browser-reachable at
+// the same host this dashboard was loaded from.
+document.getElementById('cam').src = `http://${location.hostname}:8091/stream.mjpg`;
 update();
 setInterval(update, 1000);
 </script>
@@ -202,15 +208,13 @@ class SharedState:
     goal_status: str = ""
     yolo: dict | None = None
     cpu_temp_c: float | None = None
-    cpu_load1: float | None = None
-    cpu_count: int = 1
+    cpu_percent: float | None = None
     mem_used_pct: float | None = None
     disk_free_gb: float | None = None
-    wifi_dbm: float | None = None
     history: dict[str, deque] = field(default_factory=lambda: {
         name: deque(maxlen=HISTORY_LEN)
-        for name in ("battery_v", "cpu_temp_c", "cpu_load1", "mem_used_pct",
-                     "lidar_min_m", "disk_free_gb", "wifi_dbm")
+        for name in ("battery_v", "cpu_temp_c", "cpu_percent", "mem_used_pct",
+                     "lidar_min_m", "disk_free_gb")
     })
 
 
@@ -312,16 +316,38 @@ def read_disk_free_gb(path: str) -> float | None:
         return None
 
 
-def read_loadavg1() -> float | None:
+def read_cpu_stat() -> tuple[int, int] | None:
+    """Returns (total_jiffies, idle_jiffies) from /proc/stat's aggregate
+    "cpu " line. Two samples a second apart give a percent-busy reading like
+    Task Manager/Activity Monitor -- unlike load average (a queue-length
+    metric that isn't a percentage and confuses people expecting one)."""
     try:
-        with open("/proc/loadavg", "r", encoding="ascii") as handle:
-            return float(handle.readline().split()[0])
-    except (OSError, ValueError, IndexError):
+        with open("/proc/stat", "r", encoding="ascii") as handle:
+            line = handle.readline()
+    except OSError:
         return None
+    if not line.startswith("cpu "):
+        return None
+    try:
+        values = [int(v) for v in line.split()[1:]]
+    except ValueError:
+        return None
+    if len(values) < 4:
+        return None
+    idle = values[3] + (values[4] if len(values) > 4 else 0)  # idle + iowait
+    return sum(values), idle
 
 
-def read_cpu_count() -> int:
-    return os.cpu_count() or 1
+def cpu_percent_from_samples(
+    previous: tuple[int, int] | None, current: tuple[int, int] | None
+) -> float | None:
+    if previous is None or current is None:
+        return None
+    total_delta = current[0] - previous[0]
+    idle_delta = current[1] - previous[1]
+    if total_delta <= 0:
+        return None
+    return round((total_delta - idle_delta) / total_delta * 100.0, 1)
 
 
 def read_mem_used_pct() -> float | None:
@@ -342,41 +368,25 @@ def read_mem_used_pct() -> float | None:
     return round((total - available) / total * 100.0, 1)
 
 
-def read_wifi_dbm(path: str) -> float | None:
-    # docker/runc refuses to bind-mount anything under /proc into a
-    # container, so this can't read /proc/net/wireless directly. A host-side
-    # timer (scripts/host_wifi_probe.sh) parses it outside the container and
-    # writes the value here as a plain file, which mounts fine.
-    try:
-        with open(path, "r", encoding="ascii") as handle:
-            return float(handle.readline().strip())
-    except (OSError, ValueError):
-        return None
-
-
-def poll_system(
-    state: SharedState, stop_event: threading.Event, disk_path: str, wifi_path: str
-) -> None:
-    cpu_count = read_cpu_count()
+def poll_system(state: SharedState, stop_event: threading.Event, disk_path: str) -> None:
+    previous_stat = read_cpu_stat()
     while not stop_event.is_set():
+        stop_event.wait(1.0)
         temp = read_cpu_temp_c()
-        load1 = read_loadavg1()
+        current_stat = read_cpu_stat()
+        cpu_pct = cpu_percent_from_samples(previous_stat, current_stat)
+        previous_stat = current_stat
         mem_pct = read_mem_used_pct()
         disk = read_disk_free_gb(disk_path)
-        wifi = read_wifi_dbm(wifi_path)
         with state.lock:
             state.cpu_temp_c = temp
-            state.cpu_load1 = load1
-            state.cpu_count = cpu_count
+            state.cpu_percent = cpu_pct
             state.mem_used_pct = mem_pct
             state.disk_free_gb = disk
-            state.wifi_dbm = wifi
         record(state, "cpu_temp_c", temp)
-        record(state, "cpu_load1", load1)
+        record(state, "cpu_percent", cpu_pct)
         record(state, "mem_used_pct", mem_pct)
         record(state, "disk_free_gb", disk)
-        record(state, "wifi_dbm", wifi)
-        stop_event.wait(1.0)
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -404,13 +414,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             payload = {
                 "battery_v": self.state.battery_v,
                 "cpu_temp_c": self.state.cpu_temp_c,
-                "cpu_load1": self.state.cpu_load1,
-                "cpu_count": self.state.cpu_count,
+                "cpu_percent": self.state.cpu_percent,
                 "mem_used_pct": self.state.mem_used_pct,
                 "lidar_min_m": self.state.lidar_min_m,
                 "lidar_max_m": self.state.lidar_max_m,
                 "disk_free_gb": self.state.disk_free_gb,
-                "wifi_dbm": self.state.wifi_dbm,
                 "cmd_vel": self.state.cmd_vel,
                 "odom_speed": self.state.odom_speed,
                 "imu_gyro_z_deg": self.state.imu_gyro_z_deg,
@@ -434,8 +442,6 @@ def main() -> int:
     parser.add_argument("--yolo-url", default=os.getenv("DASHBOARD_YOLO_URL",
                                                           "http://z-boys-yolo-live:8091/health"))
     parser.add_argument("--disk-path", default=os.getenv("DASHBOARD_DISK_PATH", "/"))
-    parser.add_argument("--wifi-path", default=os.getenv("DASHBOARD_WIFI_PATH",
-                                                          "/run/rover-wifi-dbm"))
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -453,7 +459,7 @@ def main() -> int:
     yolo_thread = threading.Thread(target=poll_yolo, args=(state, stop_event, args.yolo_url),
                                    daemon=True, name="yolo-poll")
     system_thread = threading.Thread(
-        target=poll_system, args=(state, stop_event, args.disk_path, args.wifi_path),
+        target=poll_system, args=(state, stop_event, args.disk_path),
         daemon=True, name="system-poll",
     )
     yolo_thread.start()
