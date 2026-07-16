@@ -19,15 +19,18 @@ public sealed class VirtualSensors : MonoBehaviour
     [SerializeField] private Transform gripperIRPoint;
 
     [Header("Ultrasonic sensor")]
-    [SerializeField, Min(0.05f)] private float ultrasonicRange = 2f;
+    [Tooltip("Maximum simulated range: 3.43 metres (343 centimetres).")]
+    [SerializeField, Min(0.05f)] private float ultrasonicRange = 3.43f;
     [SerializeField, Range(1f, 90f)]
     private float ultrasonicConeAngleDegrees = 30f;
     [SerializeField, Range(1, 31)] private int ultrasonicRayCount = 7;
 
     [Header("Obstacle IR sensors")]
+    [Tooltip("Left/right obstacle sensor range: 0.15 metres (15 cm).")]
     [SerializeField, Min(0.01f)] private float obstacleIRRange = 0.15f;
 
     [Header("Gripper IR sensor")]
+    [Tooltip("Short TargetBall detector range from the task guide: 7.5 cm.")]
     [SerializeField, Min(0.01f)] private float gripperIRRange = 0.075f;
     [SerializeField, Range(0f, 0.03f)] private float gripperBeamRadius = 0.008f;
     [SerializeField] private string targetBallTag = "TargetBall";

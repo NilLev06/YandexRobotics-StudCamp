@@ -137,24 +137,48 @@ public sealed class GfsxSensorHeadRigController : MonoBehaviour
         if (keyboard == null)
             return;
 
-        panNegative = keyboard.jKey.isPressed;
-        panPositive = keyboard.lKey.isPressed;
-        tiltNegative = keyboard.kKey.isPressed;
-        tiltPositive = keyboard.iKey.isPressed;
-        panNegativePressed = keyboard.jKey.wasPressedThisFrame;
-        panPositivePressed = keyboard.lKey.wasPressedThisFrame;
-        tiltNegativePressed = keyboard.kKey.wasPressedThisFrame;
-        tiltPositivePressed = keyboard.iKey.wasPressedThisFrame;
+        panNegative =
+            keyboard.jKey.isPressed || keyboard.leftArrowKey.isPressed;
+        panPositive =
+            keyboard.lKey.isPressed || keyboard.rightArrowKey.isPressed;
+        tiltNegative =
+            keyboard.kKey.isPressed || keyboard.downArrowKey.isPressed;
+        tiltPositive =
+            keyboard.iKey.isPressed || keyboard.upArrowKey.isPressed;
+        panNegativePressed =
+            keyboard.jKey.wasPressedThisFrame ||
+            keyboard.leftArrowKey.wasPressedThisFrame;
+        panPositivePressed =
+            keyboard.lKey.wasPressedThisFrame ||
+            keyboard.rightArrowKey.wasPressedThisFrame;
+        tiltNegativePressed =
+            keyboard.kKey.wasPressedThisFrame ||
+            keyboard.downArrowKey.wasPressedThisFrame;
+        tiltPositivePressed =
+            keyboard.iKey.wasPressedThisFrame ||
+            keyboard.upArrowKey.wasPressedThisFrame;
         resetPressed = keyboard.uKey.wasPressedThisFrame;
 #else
-        panNegative = Input.GetKey(KeyCode.J);
-        panPositive = Input.GetKey(KeyCode.L);
-        tiltNegative = Input.GetKey(KeyCode.K);
-        tiltPositive = Input.GetKey(KeyCode.I);
-        panNegativePressed = Input.GetKeyDown(KeyCode.J);
-        panPositivePressed = Input.GetKeyDown(KeyCode.L);
-        tiltNegativePressed = Input.GetKeyDown(KeyCode.K);
-        tiltPositivePressed = Input.GetKeyDown(KeyCode.I);
+        panNegative =
+            Input.GetKey(KeyCode.J) || Input.GetKey(KeyCode.LeftArrow);
+        panPositive =
+            Input.GetKey(KeyCode.L) || Input.GetKey(KeyCode.RightArrow);
+        tiltNegative =
+            Input.GetKey(KeyCode.K) || Input.GetKey(KeyCode.DownArrow);
+        tiltPositive =
+            Input.GetKey(KeyCode.I) || Input.GetKey(KeyCode.UpArrow);
+        panNegativePressed =
+            Input.GetKeyDown(KeyCode.J) ||
+            Input.GetKeyDown(KeyCode.LeftArrow);
+        panPositivePressed =
+            Input.GetKeyDown(KeyCode.L) ||
+            Input.GetKeyDown(KeyCode.RightArrow);
+        tiltNegativePressed =
+            Input.GetKeyDown(KeyCode.K) ||
+            Input.GetKeyDown(KeyCode.DownArrow);
+        tiltPositivePressed =
+            Input.GetKeyDown(KeyCode.I) ||
+            Input.GetKeyDown(KeyCode.UpArrow);
         resetPressed = Input.GetKeyDown(KeyCode.U);
 #endif
 
@@ -451,14 +475,14 @@ public sealed class GfsxSensorHeadRigController : MonoBehaviour
             "SENSOR SERVOS  •  U = CENTER");
 
         float requestedS5 = DrawServoRow(
-            "S5 pan  J/L",
+            "S5 pan  ←/→",
             s5PanAngle,
             s5MinimumAngle,
             s5MaximumAngle,
             x,
             y + 31f);
         float requestedS6 = DrawServoRow(
-            "S6 tilt  K/I",
+            "S6 tilt  ↓/↑",
             s6TiltAngle,
             s6MinimumAngle,
             s6MaximumAngle,

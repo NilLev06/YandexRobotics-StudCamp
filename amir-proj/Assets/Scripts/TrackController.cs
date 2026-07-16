@@ -157,23 +157,15 @@ public sealed class TrackController : MonoBehaviour
             return;
         }
 
-        forwardPressed =
-            keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed;
-        reversePressed =
-            keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed;
-        rightPressed =
-            keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed;
-        leftPressed =
-            keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed;
+        forwardPressed = keyboard.wKey.isPressed;
+        reversePressed = keyboard.sKey.isPressed;
+        rightPressed = keyboard.dKey.isPressed;
+        leftPressed = keyboard.aKey.isPressed;
 #else
-        forwardPressed =
-            Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow);
-        reversePressed =
-            Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow);
-        rightPressed =
-            Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow);
-        leftPressed =
-            Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow);
+        forwardPressed = Input.GetKey(KeyCode.W);
+        reversePressed = Input.GetKey(KeyCode.S);
+        rightPressed = Input.GetKey(KeyCode.D);
+        leftPressed = Input.GetKey(KeyCode.A);
 #endif
 
         float gas = ButtonValue(forwardPressed) -
