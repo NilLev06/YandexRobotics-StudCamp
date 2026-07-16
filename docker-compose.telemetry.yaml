@@ -71,6 +71,39 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  yolo-video:
+    image: registry.robotics-lab.ru/robomarvel:v6
+    container_name: z-boys-yolo-video
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    cpu_shares: 128
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      YOLO_VIDEO_SOURCE: http://z-boys-yolo-live:8091/stream.mjpg
+      YOLO_VIDEO_OUTPUT_DIR: /logs/session/video
+    entrypoint:
+      - /root/venv/bin/python
+      - -u
+      - /app/record_yolo_video.py
+    volumes:
+      - ./scripts/record_yolo_video.py:/app/record_yolo_video.py:ro
+      - ${TELEMETRY_SESSION_DIR:?set by run_telemetry.sh}:/logs/session
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    networks:
+      - rover-main
+    stop_grace_period: 8s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
 networks:
   rover-main:
     external: true

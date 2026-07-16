@@ -25,7 +25,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-RECORDER_CONTAINERS = ("z-boys-bag", "z-boys-video")
+RECORDER_CONTAINERS = ("z-boys-bag", "z-boys-video", "z-boys-yolo-video")
 SYSTEM_INTERVAL_S = 1.0
 YOLO_INTERVAL_S = 1.0
 DOCKER_STATS_INTERVAL_S = 15.0

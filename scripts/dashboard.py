@@ -76,7 +76,7 @@ PAGE = """<!doctype html>
     <div class="card"><h2>Память занято, %</h2><div class="stat" id="mem-stat">—</div><canvas id="mem-chart"></canvas></div>
     <div class="card"><h2>Лидар: клиренс / дальний край, м</h2><div class="stat" id="lidar-stat">—</div><div class="sub" id="lidar-sub"></div><canvas id="lidar-chart"></canvas></div>
     <div class="card"><h2>Свободно на диске, ГБ</h2><div class="stat" id="disk-stat">—</div><canvas id="disk-chart"></canvas></div>
-    <div class="card"><h2>Измеренная скорость (одометрия)</h2><div class="stat" id="speed-stat">—</div><div class="sub" id="speed-sub">по колёсным энкодерам, не по IMU — см. пояснение ниже</div></div>
+    <div class="card"><h2>Измеренная скорость (одометрия)</h2><div class="stat" id="speed-stat">—</div><div class="sub" id="speed-sub">с платы моторного контроллера, не по IMU — см. пояснение ниже</div></div>
     <div class="card"><h2>Команда движения</h2><div class="stat" id="cmdvel-stat">—</div><div class="sub" id="cmdvel-sub"></div></div>
     <div class="card"><h2>IMU: угловая скорость, &deg;/с</h2><div class="stat" id="imu-stat">—</div><div class="sub">гироскоп; акселерометр на плате есть, но не откалиброван и не публикуется в ROS — линейную скорость по IMU сейчас честно посчитать нельзя</div></div>
     <div class="card"><h2>Wi-Fi, дБм</h2><div class="stat" id="wifi-stat">—</div><canvas id="wifi-chart"></canvas></div>
@@ -262,8 +262,10 @@ class DashboardNode(Node):
             }
 
     def _on_odom(self, msg: Odometry) -> None:
-        # This is the honest source of "speed": measured from wheel encoders.
-        # The IMU on this rover has no populated accelerometer (see hwnode.py,
+        # This is the honest source of "speed": left_speed/right_speed from
+        # the motor controller board (hwnode.py). Exact sensing mechanism on
+        # that board is unconfirmed -- not necessarily encoders. The IMU on
+        # this rover has no populated accelerometer (see hwnode.py,
         # linear_acceleration_covariance[0] == -1 means "do not use"), so
         # linear speed cannot be derived from IMU data at all.
         with self.state.lock:

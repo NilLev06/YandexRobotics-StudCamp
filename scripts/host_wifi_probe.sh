@@ -15,4 +15,10 @@ parse_dbm() {
 value="$(parse_dbm)"
 if [[ -n "$value" ]]; then
   echo "$value" > "$OUT_TMP" && mv -f "$OUT_TMP" "$OUT_FILE"
+else
+  # No wlan0 line (Wi-Fi down/disconnected): remove the file instead of
+  # leaving the last-known value in place forever. dashboard.py's
+  # read_wifi_dbm() treats a missing file as "no data" (shows "—"), which is
+  # honest -- a stale number here would silently lie about the connection.
+  rm -f "$OUT_TMP" "$OUT_FILE"
 fi
