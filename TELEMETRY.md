@@ -136,3 +136,22 @@ docker compose -f docker-compose.dashboard.yaml up -d
 (они и так пишутся отдельно через основную телеметрию выше).
 
 Остановить: `docker compose -f docker-compose.dashboard.yaml down`.
+
+## Карта из записанных данных
+
+`scripts/build_map_from_bag.sh` прогоняет `/scan` + `/tf` из уже записанной
+сессии через тот же slam_toolbox, что работает на роботе в реальном времени,
+и сохраняет получившуюся карту (`.pgm` + `.yaml`, формат `nav2_map_server`).
+
+```sh
+cd ~/z_boys
+./scripts/build_map_from_bag.sh --bag ~/rover-logs/sessions/<session>/bag
+```
+
+Карта появится в `~/rover-logs/sessions/<session>/map/map.yaml`. Можно указать
+`--output`, `--name` и `--rate` (скорость прогона бага, по умолчанию 3x).
+
+Безопасно запускать в любой момент, даже пока ровер работает: скрипт поднимает
+одноразовый контейнер на отдельном `ROS_DOMAIN_ID` и не подключает его к сети
+ровера — он видит только сам себя и проигрываемый bag, никак не пересекаясь
+с живым SLAM на роботе.
