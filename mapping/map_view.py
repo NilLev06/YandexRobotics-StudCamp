@@ -25,6 +25,7 @@ import math
 import os
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,6 +39,7 @@ from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.duration import Duration
 from rclpy.time import Time
+from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -46,6 +48,7 @@ LOG = logging.getLogger("map-view")
 MAX_FOUND = 300
 MAX_SIGHTED = 300
 MAX_TRAIL = 2000
+MAX_PHOTOS = 80
 FOUND_STALE_S = 3600.0
 SIGHTED_STALE_S = 1800.0
 TRAIL_MIN_STEP_M = 0.15
@@ -69,10 +72,18 @@ PAGE = """<!doctype html>
   .stage { position: relative; }
   .stage img, .stage canvas { display: block; max-width: 100%; height: auto; border-radius: 6px; }
   .stage canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  .stage canvas.clickable { cursor: pointer; }
   #status { font-size: 12px; color: #8793a1; padding: 0 16px 10px; }
   .presets { display: flex; gap: 8px; padding: 8px 16px 0; }
   .presets button { background: #121822; color: #aeb8c4; border: 1px solid #1c2530; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
   .presets button:hover { background: #1c2530; color: #e8edf3; }
+  #lightbox {
+    display: none; position: fixed; inset: 0; background: rgba(5, 7, 10, 0.88);
+    align-items: center; justify-content: center; z-index: 10; cursor: zoom-out;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: min(92vw, 900px); max-height: 88vh; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  #lightbox .hint { position: absolute; top: 14px; right: 18px; font-size: 12px; color: #8793a1; }
 </style>
 </head>
 <body>
@@ -96,6 +107,10 @@ PAGE = """<!doctype html>
     <canvas id="overlay"></canvas>
   </div>
 </main>
+<div id="lightbox">
+  <span class="hint">клик — закрыть</span>
+  <img id="lightbox-img" alt="фото с камеры">
+</div>
 <script>
   const base = document.getElementById('base');
   const canvas = document.getElementById('overlay');
@@ -106,6 +121,34 @@ PAGE = """<!doctype html>
   const cbSighted = document.getElementById('layer-sighted');
   const cbCamera = document.getElementById('layer-camera');
   const allLayers = [cbTrail, cbFound, cbSighted, cbCamera];
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightbox-img');
+
+  // Screen-space positions of markers that have a real photo pinned to them,
+  // rebuilt every draw pass; canvas click hit-tests against this.
+  let clickablePoints = [];
+
+  function openLightbox(photoId) {
+    lightboxImg.src = '/photo/' + photoId + '.jpg?t=' + Date.now();
+    lightbox.classList.add('open');
+  }
+  lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
+
+  canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+    let nearest = null;
+    let nearestDist = 14; // px hit-test radius
+    for (const point of clickablePoints) {
+      const dist = Math.hypot(point.px - clickX, point.py - clickY);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = point;
+      }
+    }
+    if (nearest) openLightbox(nearest.photoId);
+  });
 
   const PRESETS = {
     all: [true, true, true, true],
@@ -160,6 +203,7 @@ PAGE = """<!doctype html>
       };
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      clickablePoints = [];
 
       if (cbTrail.checked && layers.trail.length > 1) {
         ctx.strokeStyle = '#7f77dd';
@@ -194,6 +238,13 @@ PAGE = """<!doctype html>
             ctx.font = '10px system-ui, sans-serif';
             ctx.fillText(`~${s.approx_distance_m.toFixed(1)}м`, tip[0] + 3, tip[1]);
           }
+          if (s.photo_id) {
+            ctx.fillStyle = '#5dcaa5';
+            ctx.beginPath();
+            ctx.arc(tip[0], tip[1], 3, 0, 2 * Math.PI);
+            ctx.fill();
+            clickablePoints.push({px: tip[0], py: tip[1], photoId: s.photo_id});
+          }
         }
       }
 
@@ -224,6 +275,14 @@ PAGE = """<!doctype html>
           ctx.beginPath();
           ctx.arc(px, py, 5, 0, 2 * Math.PI);
           ctx.fill();
+          if (f.photo_id) {
+            ctx.strokeStyle = '#f6b73c';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(px, py, 9, 0, 2 * Math.PI);
+            ctx.stroke();
+            clickablePoints.push({px, py, photoId: f.photo_id});
+          }
         }
       }
 
@@ -252,6 +311,8 @@ PAGE = """<!doctype html>
         ctx.arc(px, py, 6, 0, 2 * Math.PI);
         ctx.fill();
       }
+
+      canvas.classList.toggle('clickable', clickablePoints.length > 0);
     } catch (e) {
       status.textContent = 'офлайн';
     }
@@ -270,6 +331,7 @@ class FoundMarker:
     x: float
     y: float
     at: float
+    photo_id: str | None = None
 
 
 @dataclass
@@ -281,6 +343,7 @@ class SightedRay:
     yaw: float
     at: float
     approx_distance_m: float | None = None
+    photo_id: str | None = None
 
 
 @dataclass
@@ -292,6 +355,10 @@ class SharedState:
     trail: list[tuple[float, float]] = field(default_factory=list)
     found: list[FoundMarker] = field(default_factory=list)
     sighted: list[SightedRay] = field(default_factory=list)
+    # Real camera frames pinned to found/sighted markers, keyed by the same
+    # photo_id embedded in their /search/found or /search/sighted payload.
+    # Bounded FIFO cache -- this is diagnostic content, not measurement data.
+    photos: "OrderedDict[str, bytes]" = field(default_factory=OrderedDict)
     latest_jpeg: bytes | None = None
     last_trail_at: float = 0.0
 
@@ -342,11 +409,22 @@ class MapViewNode(Node):
         self.create_subscription(OccupancyGrid, "/map", self._on_map, 5)
         self.create_subscription(String, "/search/found", self._on_found, 20)
         self.create_subscription(String, "/search/sighted", self._on_sighted, 20)
+        self.create_subscription(CompressedImage, "/search/photo", self._on_photo, 10)
         self.create_timer(0.5, self._update_pose)
 
     def _on_map(self, msg: OccupancyGrid) -> None:
         with self.state.lock:
             self.state.grid = msg
+
+    def _on_photo(self, msg: CompressedImage) -> None:
+        photo_id = msg.header.frame_id
+        if not photo_id:
+            return
+        with self.state.lock:
+            self.state.photos[photo_id] = bytes(msg.data)
+            self.state.photos.move_to_end(photo_id)
+            while len(self.state.photos) > MAX_PHOTOS:
+                self.state.photos.popitem(last=False)
 
     def _on_found(self, msg: String) -> None:
         try:
@@ -354,11 +432,13 @@ class MapViewNode(Node):
             label = str(payload.get("class", "object"))
             x = float(payload["x"])
             y = float(payload["y"])
+            raw_photo_id = payload.get("photo_id")
+            photo_id = str(raw_photo_id) if raw_photo_id else None
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             self.get_logger().warning(f"ignoring malformed /search/found message: {msg.data!r}")
             return
         with self.state.lock:
-            self.state.found.append(FoundMarker(label, x, y, time.time()))
+            self.state.found.append(FoundMarker(label, x, y, time.time(), photo_id))
             now = time.time()
             self.state.found = [
                 m for m in self.state.found if now - m.at < FOUND_STALE_S
@@ -374,12 +454,16 @@ class MapViewNode(Node):
             yaw = float(payload["yaw"])
             raw_distance = payload.get("approx_distance_m")
             approx_distance_m = float(raw_distance) if raw_distance is not None else None
+            raw_photo_id = payload.get("photo_id")
+            photo_id = str(raw_photo_id) if raw_photo_id else None
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             self.get_logger().warning(f"ignoring malformed /search/sighted message: {msg.data!r}")
             return
         with self.state.lock:
             self.state.sighted.append(
-                SightedRay(label, confidence, x, y, yaw, time.time(), approx_distance_m)
+                SightedRay(
+                    label, confidence, x, y, yaw, time.time(), approx_distance_m, photo_id
+                )
             )
             now = time.time()
             self.state.sighted = [
@@ -444,6 +528,8 @@ class MapHandler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.OK, "image/jpeg", jpeg)
         elif path == "/api/layers":
             self._send_layers()
+        elif path.startswith("/photo/") and path.endswith(".jpg"):
+            self._send_photo(path[len("/photo/"):-len(".jpg")])
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -454,6 +540,16 @@ class MapHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(payload)
+
+    def _send_photo(self, photo_id: str) -> None:
+        # photo_id comes straight from the URL path; it is only ever used as
+        # a dict key (never a filesystem path), so there is no traversal risk.
+        with self.state.lock:
+            jpeg = self.state.photos.get(photo_id)
+        if jpeg is None:
+            self.send_error(HTTPStatus.NOT_FOUND, "photo not available")
+            return
+        self._send(HTTPStatus.OK, "image/jpeg", jpeg)
 
     def _send_layers(self) -> None:
         with self.state.lock:
@@ -482,7 +578,8 @@ class MapHandler(BaseHTTPRequestHandler):
             ),
             "trail": [[round(x, 3), round(y, 3)] for x, y in trail],
             "found": [
-                {"class": m.label, "x": round(m.x, 3), "y": round(m.y, 3), "at": m.at}
+                {"class": m.label, "x": round(m.x, 3), "y": round(m.y, 3), "at": m.at,
+                 "photo_id": m.photo_id}
                 for m in found
             ],
             "sighted": [
@@ -490,7 +587,8 @@ class MapHandler(BaseHTTPRequestHandler):
                  "x": round(s.x, 3), "y": round(s.y, 3), "yaw": round(s.yaw, 3), "at": s.at,
                  "approx_distance_m": (
                      round(s.approx_distance_m, 2) if s.approx_distance_m is not None else None
-                 )}
+                 ),
+                 "photo_id": s.photo_id}
                 for s in sighted
             ],
         }

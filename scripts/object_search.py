@@ -21,6 +21,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Sequence
 
@@ -43,7 +44,7 @@ from rclpy.qos import (
     qos_profile_sensor_data,
 )
 from rclpy.time import Time
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import CompressedImage, LaserScan
 from std_msgs.msg import Float32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -474,6 +475,7 @@ class BottleSearchNode(Node):
         self.found_publisher = self.create_publisher(String, "/search/found", 10)
         self.sighted_publisher = self.create_publisher(String, "/search/sighted", 10)
         self.status_publisher = self.create_publisher(String, "/search/status", 10)
+        self.photo_publisher = self.create_publisher(CompressedImage, "/search/photo", 5)
         self.create_subscription(
             LaserScan, args.scan_topic, self._on_scan, qos_profile_sensor_data
         )
@@ -1244,6 +1246,34 @@ class BottleSearchNode(Node):
             time.sleep(0.03)
         raise UnsafeError(f"lidar association was not stable: {last_error}")
 
+    def _capture_photo(self) -> Optional[str]:
+        """Best-effort capture of the current annotated camera frame from
+        yolo-live, so a real photo can be pinned to a map marker instead of
+        just an abstract dot/ray. Returns a short id the caller should embed
+        in its /search/found or /search/sighted payload as "photo_id", or
+        None if the capture failed. Must never raise: this is diagnostic and
+        must not affect the search itself, and is called at most once per
+        new sighting/found event (not per inference frame)."""
+        try:
+            request = urllib.request.Request(
+                self.args.snapshot_url, headers={"Cache-Control": "no-store"}
+            )
+            with urllib.request.urlopen(request, timeout=1.5) as response:
+                jpeg_bytes = response.read(2 * 1024 * 1024)
+            if not jpeg_bytes:
+                return None
+            photo_id = uuid.uuid4().hex[:12]
+            message = CompressedImage()
+            message.header.stamp = self.get_clock().now().to_msg()
+            message.header.frame_id = photo_id
+            message.format = "jpeg"
+            message.data = jpeg_bytes
+            self.photo_publisher.publish(message)
+            return photo_id
+        except Exception as exc:  # never let a diagnostic capture break search
+            self.get_logger().debug(f"photo capture skipped: {exc}")
+            return None
+
     def _try_publish_sighted(self, observation: BottleObservation) -> None:
         """Best-effort map marker for a raw (unconfirmed, uncalibrated)
         camera sighting. There is no range for a single YOLO box, so this
@@ -1262,6 +1292,7 @@ class BottleSearchNode(Node):
             approx_distance_m = _approx_distance_m(
                 fy_px, observation.bbox, self.args.target_class
             )
+            photo_id = self._capture_photo()
             payload = json.dumps({
                 "class": self.args.target_class,
                 "confidence": round(observation.confidence, 2),
@@ -1272,6 +1303,7 @@ class BottleSearchNode(Node):
                 # and the class has a known typical size. Never a real
                 # measurement; never used for navigation.
                 "approx_distance_m": approx_distance_m,
+                "photo_id": photo_id,
             })
             self.sighted_publisher.publish(String(data=payload))
         except Exception as exc:  # never let a diagnostic publish break search
@@ -1292,6 +1324,7 @@ class BottleSearchNode(Node):
             0.0,
         )
         target_x, target_y, _ = _apply_transform(map_from_base, target_in_base)
+        photo_id = self._capture_photo()
         payload = json.dumps({
             "class": self.args.target_class,
             "x": round(target_x, 3),
@@ -1299,6 +1332,7 @@ class BottleSearchNode(Node):
             "range_m": round(target.range_m, 3),
             "map_frame": self.args.map_frame,
             "ts": time.time(),
+            "photo_id": photo_id,
         })
         self.found_publisher.publish(String(data=payload))
 
@@ -1495,6 +1529,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--yolo-url", default="http://z-boys-yolo-live:8091/health"
     )
     parser.add_argument(
+        "--snapshot-url", default="http://z-boys-yolo-live:8091/snapshot.jpg"
+    )
+    parser.add_argument(
         "--calibration", default="/app/search_calibration.json"
     )
     parser.add_argument("--step-deg", type=float, default=15.0)
@@ -1561,6 +1598,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
             parser.error(message)
     if not args.yolo_url.startswith("http://"):
         parser.error("--yolo-url must be an http:// URL on the rover network")
+    if not args.snapshot_url.startswith("http://"):
+        parser.error("--snapshot-url must be an http:// URL on the rover network")
     args.target_class = args.target_class.strip()
     if not args.target_class or "/" in args.target_class:
         parser.error("--target-class must be a non-empty class name")
