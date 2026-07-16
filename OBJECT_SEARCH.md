@@ -106,6 +106,35 @@ sudo systemctl stop rbm-web-tests.service
 Exit codes are `0` for success, `1` for an unsafe/error stop, `2` for a complete
 no-find search (after audio playback), and `130` for an interrupted run.
 
+## Exploring when a single 360° circle isn't enough
+
+`scripts/run_explore_search.sh` wraps the same search behavior for rooms
+larger than one spin can cover: if a full 360° circle finds nothing, it picks
+the nearest unexplored frontier of the SLAM `/map` (a boundary between known
+free space and the unknown) and drives there with Nav2 before searching
+again, repeating until the target is confirmed, the reachable area is fully
+mapped, or `--max-cycles` / `--max-runtime-s` is reached.
+
+It changes nothing about the safety model above — `scripts/explore_search.py`
+is a subclass of `object_search.py`'s `BottleSearchNode` that reuses every
+preflight gate, the same Nav2 action wrappers, and the same `/search/found`,
+`/search/sighted`, `/search/status` topics, so `mapping/map_view.py` shows
+exploration runs with no changes on its side. `scripts/frontier.py` (pure
+Python, no ROS dependency) does the frontier selection and is independently
+testable with `python3 scripts/frontier.py`.
+
+```sh
+echo "bottle" > config/target.txt
+./scripts/run_explore_search.sh --dry-run --search-only   # preflight only
+./scripts/run_explore_search.sh --search-only              # explore, don't approach
+./scripts/run_explore_search.sh --max-cycles 5              # full explore + approach
+```
+
+Exit codes match `run_object_search.sh`: `0` on a confirmed target, `1` on an
+unsafe/error stop, `2` once the reachable area is fully explored (or the
+cycle/time budget runs out) without a confirmed target — that status plays
+the same no-find WAV as the single-circle search.
+
 ## Calibration required for approach
 
 Approach mode must remain locked until these are physically measured and

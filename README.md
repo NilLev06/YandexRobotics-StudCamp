@@ -48,6 +48,11 @@ config/target.txt  ──►  run_object_search.sh  ──►  object_search.py
   шагами в поиске целевого класса и — только если калибровка подтверждена —
   подъезжает к нему через Nav2. Полную модель безопасности и инструкции по
   запуску см. в [OBJECT_SEARCH.md](OBJECT_SEARCH.md).
+- **`explore_search.py`** — надстройка над `object_search.py` для комнат
+  больше одного круга обзора: если полный оборот ничего не находит, едет к
+  ближайшей неисследованной границе карты (`scripts/frontier.py`) и ищет
+  снова. Тот же safety-контур и те же топики `/search/*`, `mapping/`
+  ничего не меняет. См. [OBJECT_SEARCH.md](OBJECT_SEARCH.md#exploring-when-a-single-360-circle-isnt-enough).
 - **`hwnode.py`** — единственное, что говорит с контроллером моторов по
   serial; всё остальное командует движением через ROS-топики/actions.
 - **Телеметрия** ([TELEMETRY.md](TELEMETRY.md)) — "чёрный ящик": с загрузки

@@ -1351,7 +1351,10 @@ class BottleSearchNode(Node):
         self.stop_requested.set()
         self._cancel_active_goal()
 
-    def run(self) -> int:
+    def preflight_and_calibrate(self) -> Optional[Calibration]:
+        """Run every safety preflight and, unless --search-only, load and
+        validate the approach calibration. Returns the Calibration (or None
+        in --search-only mode). Raises UnsafeError on any failed gate."""
         self._publish_status(f"Preflight: проверяю безопасность перед поиском {self.args.target_class}")
         health = self._preflight()
         _, image_width, image_height = self._validate_health(health)
@@ -1369,12 +1372,14 @@ class BottleSearchNode(Node):
                 f"validated approach calibration for {calibration.lidar_frame} -> "
                 f"{calibration.camera_frame}"
             )
-        if self.args.dry_run:
-            self.get_logger().info(
-                "dry-run complete: all preflight gates passed; no action was sent"
-            )
-            return EXIT_OK
+        return calibration
 
+    def run_spin_search(self, calibration: Optional[Calibration]) -> int:
+        """Run exactly one full 360-degree step-and-stare search, approaching
+        and returning EXIT_OK on a confirmed target, or EXIT_NOT_FOUND after a
+        complete, uneventful circle. Does not preflight -- call
+        preflight_and_calibrate() first (once per process, or once per
+        exploration cycle for a caller that wants fresh sensor checks)."""
         steps = math.ceil(360.0 / self.args.step_deg)
         step_radians = 2.0 * math.pi / steps
         stare_timeout = max(3.0, self.args.detection_confirmations * 1.25)
@@ -1462,6 +1467,15 @@ class BottleSearchNode(Node):
         )
         self._publish_status(f"Не найдено: {self.args.target_class} не обнаружен после полного круга")
         return EXIT_NOT_FOUND
+
+    def run(self) -> int:
+        calibration = self.preflight_and_calibrate()
+        if self.args.dry_run:
+            self.get_logger().info(
+                "dry-run complete: all preflight gates passed; no action was sent"
+            )
+            return EXIT_OK
+        return self.run_spin_search(calibration)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
