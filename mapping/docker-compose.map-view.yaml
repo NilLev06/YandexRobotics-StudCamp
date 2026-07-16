@@ -30,7 +30,7 @@ services:
       - -u
       - /app/map_view.py
     volumes:
-      - ./scripts/map_view.py:/app/map_view.py:ro
+      - ./map_view.py:/app/map_view.py:ro
     tmpfs:
       - /tmp:size=16m,mode=1777
     ports:

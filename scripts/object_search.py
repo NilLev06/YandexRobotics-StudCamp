@@ -421,6 +421,7 @@ class BottleSearchNode(Node):
         self.controller_parameters = AsyncParameterClient(self, "/controller_server")
         self.zero_publisher = self.create_publisher(Twist, "/cmd_vel", 10)
         self.found_publisher = self.create_publisher(String, "/search/found", 10)
+        self.sighted_publisher = self.create_publisher(String, "/search/sighted", 10)
         self.create_subscription(
             LaserScan, args.scan_topic, self._on_scan, qos_profile_sensor_data
         )
@@ -754,6 +755,7 @@ class BottleSearchNode(Node):
                     track.append(best)
                 else:
                     track = [best]
+                    self._try_publish_sighted(best)
                 if len(track) >= self.args.detection_confirmations:
                     confirmed = _average_observations(track)
                     self.get_logger().info(
@@ -1189,6 +1191,31 @@ class BottleSearchNode(Node):
                 return result
             time.sleep(0.03)
         raise UnsafeError(f"lidar association was not stable: {last_error}")
+
+    def _try_publish_sighted(self, observation: BottleObservation) -> None:
+        """Best-effort map marker for a raw (unconfirmed, uncalibrated)
+        camera sighting. There is no range for a single YOLO box, so this
+        publishes the rover's own pose/heading, not the object's location --
+        the map draws it as a direction ray, never as a point. Must never
+        raise: this is diagnostic and must not affect the search itself.
+        """
+        try:
+            transform = self._lookup_transform(self.args.map_frame, self.args.base_frame)
+        except UnsafeError:
+            return
+        try:
+            map_from_base = _ros_transform(transform)
+            yaw = _yaw_from_quaternion(map_from_base.quaternion)
+            payload = json.dumps({
+                "class": self.args.target_class,
+                "confidence": round(observation.confidence, 2),
+                "x": round(map_from_base.translation[0], 3),
+                "y": round(map_from_base.translation[1], 3),
+                "yaw": round(yaw, 3),
+            })
+            self.sighted_publisher.publish(String(data=payload))
+        except Exception as exc:  # never let a diagnostic publish break search
+            self.get_logger().debug(f"sighted publish skipped: {exc}")
 
     def _publish_found(self, target: LidarTarget, map_from_base: RigidTransform) -> None:
         target_in_base = (
