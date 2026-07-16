@@ -2217,12 +2217,12 @@ MonoBehaviour:
     maxStep: 0
   hasUpgradedFromAgentParameters: 1
   MaxStep: 0
-  trackController: {fileID: 0}
-  virtualSensors: {fileID: 0}
-  yoloCamera: {fileID: 0}
-  gripperController: {fileID: 0}
-  armRig: {fileID: 0}
-  sensorHeadRig: {fileID: 0}
+  trackController: {fileID: 919132147783449510}
+  virtualSensors: {fileID: 919132147783449511}
+  yoloCamera: {fileID: 2038589935}
+  gripperController: {fileID: 9094634748586075977}
+  armRig: {fileID: 919132147783449509}
+  sensorHeadRig: {fileID: 608210795}
   timePenalty: -0.001
   ballInSightReward: 0.005
 --- !u!23 &1003442069237556371
