@@ -29,7 +29,7 @@ services:
         --include-hidden-topics
         --max-bag-size 536870912
         -o /logs/session/bag
-        -e '/scan|/tf|/tf_static|/cmd_vel|/hardware/.*|/icp/.*|/ekf/.*|/odometry.*|/map($|/.*)|/plan.*|/goal($|/.*)|/camera/yolo/.*|/voice/.*|/diagnostics.*|/behavior_tree_log|/spin/_action/status|/navigate_to_pose/_action/status'
+        -e '/scan|/tf|/tf_static|/cmd_vel|/hardware/.*|/icp/.*|/ekf/.*|/odometry.*|/map($|/.*)|/plan.*|/goal($|/.*)|/search/.*|/camera/yolo/.*|/voice/.*|/diagnostics.*|/behavior_tree_log|/spin/_action/status|/navigate_to_pose/_action/status'
     volumes:
       - ${TELEMETRY_SESSION_DIR:?set by run_telemetry.sh}:/logs/session
     tmpfs:

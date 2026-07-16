@@ -44,7 +44,7 @@ from rclpy.qos import (
 )
 from rclpy.time import Time
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 
@@ -420,6 +420,7 @@ class BottleSearchNode(Node):
         )
         self.controller_parameters = AsyncParameterClient(self, "/controller_server")
         self.zero_publisher = self.create_publisher(Twist, "/cmd_vel", 10)
+        self.found_publisher = self.create_publisher(String, "/search/found", 10)
         self.create_subscription(
             LaserScan, args.scan_topic, self._on_scan, qos_profile_sensor_data
         )
@@ -1189,7 +1190,29 @@ class BottleSearchNode(Node):
             time.sleep(0.03)
         raise UnsafeError(f"lidar association was not stable: {last_error}")
 
+    def _publish_found(self, target: LidarTarget, map_from_base: RigidTransform) -> None:
+        target_in_base = (
+            target.range_m * math.cos(target.bearing_rad),
+            target.range_m * math.sin(target.bearing_rad),
+            0.0,
+        )
+        target_x, target_y, _ = _apply_transform(map_from_base, target_in_base)
+        payload = json.dumps({
+            "class": self.args.target_class,
+            "x": round(target_x, 3),
+            "y": round(target_y, 3),
+            "range_m": round(target.range_m, 3),
+            "map_frame": self.args.map_frame,
+            "ts": time.time(),
+        })
+        self.found_publisher.publish(String(data=payload))
+
     def _navigate_to_target(self, target: LidarTarget) -> None:
+        map_from_base = _ros_transform(
+            self._lookup_transform(self.args.map_frame, self.args.base_frame)
+        )
+        self._publish_found(target, map_from_base)
+
         approach_distance = target.range_m - self.args.standoff_m
         if approach_distance <= 0.08:
             self.get_logger().info("already within configured target standoff")
@@ -1199,9 +1222,6 @@ class BottleSearchNode(Node):
                 f"required approach {approach_distance:.2f} m exceeds "
                 f"limit {self.args.max_approach_m:.2f} m"
             )
-        map_from_base = _ros_transform(
-            self._lookup_transform(self.args.map_frame, self.args.base_frame)
-        )
         goal_in_base = (
             approach_distance * math.cos(target.bearing_rad),
             approach_distance * math.sin(target.bearing_rad),

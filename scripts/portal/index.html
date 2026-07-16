@@ -25,6 +25,7 @@
 <body>
 <header>
   <h1>RoboMarvel &middot; центр управления</h1>
+  <a id="link-map" href="#" target="_blank">Карта</a>
   <a id="link-snapshot" href="#" target="_blank">снимок</a>
   <a id="link-foxglove" href="#" target="_blank">Foxglove</a>
   <a id="link-health" href="#" target="_blank">YOLO health</a>
@@ -43,6 +44,7 @@
   const host = location.hostname;
   document.getElementById('cam').src = `http://${host}:8091/stream.mjpg`;
   document.getElementById('dash').src = `http://${host}:8092/`;
+  document.getElementById('link-map').href = `http://${host}:8093/`;
   document.getElementById('link-snapshot').href = `http://${host}:8091/snapshot.jpg`;
   document.getElementById('link-health').href = `http://${host}:8091/health`;
   // Foxglove Studio, connected to the rover's foxglove_bridge websocket

@@ -1,0 +1,50 @@
+# Live map: SLAM occupancy grid + robot position + markers for objects the
+# search behavior has confirmed (from /search/found). Read-only — never
+# commands motion. Requires slam_toolbox already publishing /map (part of the
+# main "ros" container's normal bringup).
+
+services:
+  map-view:
+    image: registry.robotics-lab.ru/robomarvel:v6
+    container_name: z-boys-map-view
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    cpu_shares: 128
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: /opt/ros/jazzy/lib/python3.12/site-packages
+      LD_LIBRARY_PATH: /opt/ros/jazzy/lib/aarch64-linux-gnu:/opt/ros/jazzy/lib:/usr/local/lib/aarch64-linux-gnu
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      ROS_DOMAIN_ID: "0"
+      ROS_LOG_DIR: /tmp
+      MAP_VIEW_HOST: 0.0.0.0
+      MAP_VIEW_PORT: "8093"
+    entrypoint:
+      - /root/venv/bin/python
+      - -u
+      - /app/map_view.py
+    volumes:
+      - ./scripts/map_view.py:/app/map_view.py:ro
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    ports:
+      - "0.0.0.0:8093:8093"
+    networks:
+      - rover-main
+    stop_grace_period: 8s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  rover-main:
+    external: true
+    name: robomarvel_default
