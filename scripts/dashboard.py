@@ -340,30 +340,28 @@ def read_mem_used_pct() -> float | None:
     return round((total - available) / total * 100.0, 1)
 
 
-def read_wifi_dbm() -> float | None:
+def read_wifi_dbm(path: str) -> float | None:
+    # docker/runc refuses to bind-mount anything under /proc into a
+    # container, so this can't read /proc/net/wireless directly. A host-side
+    # timer (scripts/host_wifi_probe.sh) parses it outside the container and
+    # writes the value here as a plain file, which mounts fine.
     try:
-        with open("/proc/net/wireless", "r", encoding="ascii") as handle:
-            lines = handle.readlines()
-    except OSError:
+        with open(path, "r", encoding="ascii") as handle:
+            return float(handle.readline().strip())
+    except (OSError, ValueError):
         return None
-    for line in lines[2:]:
-        parts = line.split()
-        if len(parts) >= 4:
-            try:
-                return float(parts[3].rstrip("."))
-            except ValueError:
-                return None
-    return None
 
 
-def poll_system(state: SharedState, stop_event: threading.Event, disk_path: str) -> None:
+def poll_system(
+    state: SharedState, stop_event: threading.Event, disk_path: str, wifi_path: str
+) -> None:
     cpu_count = read_cpu_count()
     while not stop_event.is_set():
         temp = read_cpu_temp_c()
         load1 = read_loadavg1()
         mem_pct = read_mem_used_pct()
         disk = read_disk_free_gb(disk_path)
-        wifi = read_wifi_dbm()
+        wifi = read_wifi_dbm(wifi_path)
         with state.lock:
             state.cpu_temp_c = temp
             state.cpu_load1 = load1
@@ -434,6 +432,8 @@ def main() -> int:
     parser.add_argument("--yolo-url", default=os.getenv("DASHBOARD_YOLO_URL",
                                                           "http://z-boys-yolo-live:8091/health"))
     parser.add_argument("--disk-path", default=os.getenv("DASHBOARD_DISK_PATH", "/"))
+    parser.add_argument("--wifi-path", default=os.getenv("DASHBOARD_WIFI_PATH",
+                                                          "/run/rover-wifi-dbm"))
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -450,8 +450,10 @@ def main() -> int:
 
     yolo_thread = threading.Thread(target=poll_yolo, args=(state, stop_event, args.yolo_url),
                                    daemon=True, name="yolo-poll")
-    system_thread = threading.Thread(target=poll_system, args=(state, stop_event, args.disk_path),
-                                     daemon=True, name="system-poll")
+    system_thread = threading.Thread(
+        target=poll_system, args=(state, stop_event, args.disk_path, args.wifi_path),
+        daemon=True, name="system-poll",
+    )
     yolo_thread.start()
     system_thread.start()
 
