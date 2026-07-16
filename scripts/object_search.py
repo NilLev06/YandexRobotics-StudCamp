@@ -473,6 +473,7 @@ class BottleSearchNode(Node):
         self.zero_publisher = self.create_publisher(Twist, "/cmd_vel", 10)
         self.found_publisher = self.create_publisher(String, "/search/found", 10)
         self.sighted_publisher = self.create_publisher(String, "/search/sighted", 10)
+        self.status_publisher = self.create_publisher(String, "/search/status", 10)
         self.create_subscription(
             LaserScan, args.scan_topic, self._on_scan, qos_profile_sensor_data
         )
@@ -1276,6 +1277,14 @@ class BottleSearchNode(Node):
         except Exception as exc:  # never let a diagnostic publish break search
             self.get_logger().debug(f"sighted publish skipped: {exc}")
 
+    def _publish_status(self, text: str) -> None:
+        """Best-effort human-readable status for dashboards/UIs. Must never
+        raise or affect the search itself."""
+        try:
+            self.status_publisher.publish(String(data=text))
+        except Exception as exc:
+            self.get_logger().debug(f"status publish skipped: {exc}")
+
     def _publish_found(self, target: LidarTarget, map_from_base: RigidTransform) -> None:
         target_in_base = (
             target.range_m * math.cos(target.bearing_rad),
@@ -1343,6 +1352,7 @@ class BottleSearchNode(Node):
         self._cancel_active_goal()
 
     def run(self) -> int:
+        self._publish_status(f"Preflight: проверяю безопасность перед поиском {self.args.target_class}")
         health = self._preflight()
         _, image_width, image_height = self._validate_health(health)
         calibration: Optional[Calibration] = None
@@ -1370,19 +1380,24 @@ class BottleSearchNode(Node):
         stare_timeout = max(3.0, self.args.detection_confirmations * 1.25)
         saw_visual_target = False
 
+        self._publish_status(f"Проверяю текущий кадр на {self.args.target_class}, до начала вращения")
         baseline_seq = self._current_yolo_seq()
         observation = self._confirm_target(baseline_seq, stare_timeout)
         if observation is not None:
             saw_visual_target = True
             if self.args.search_only:
+                self._publish_status(f"Найдено: {self.args.target_class} подтверждён (search-only, без подъезда)")
                 return EXIT_OK
             assert calibration is not None
             try:
+                self._publish_status(f"Найдено: {self.args.target_class}, ассоциирую с лидаром и подъезжаю")
                 target = self._associate_stably(observation, calibration)
                 self._navigate_to_target(target)
+                self._publish_status(f"Готово: подъехал к {self.args.target_class}")
                 return EXIT_OK
             except UnsafeError as exc:
                 self.get_logger().warning(f"initial target rejected for approach: {exc}")
+                self._publish_status(f"Отклонено для подъезда: {exc}; продолжаю поиск")
 
         completed_steps = 0
         measured_rotation = 0.0
@@ -1391,6 +1406,7 @@ class BottleSearchNode(Node):
             reason = self._sensor_guard_reason(self.args.guardian_clearance_m)
             if reason:
                 raise UnsafeError(f"before spin step {index}: {reason}")
+            self._publish_status(f"Ищу {self.args.target_class}: шаг {index}/{steps} спина")
             self._spin_step(step_radians, index, steps)
             completed_steps += 1
             # Let odometry and the camera settle, then require post-stop inference frames.
@@ -1413,16 +1429,20 @@ class BottleSearchNode(Node):
                 continue
             saw_visual_target = True
             if self.args.search_only:
+                self._publish_status(f"Найдено: {self.args.target_class} подтверждён на шаге {index}/{steps} (search-only)")
                 return EXIT_OK
             assert calibration is not None
             try:
+                self._publish_status(f"Найдено на шаге {index}/{steps}: {self.args.target_class}, подъезжаю")
                 target = self._associate_stably(observation, calibration)
                 self._navigate_to_target(target)
+                self._publish_status(f"Готово: подъехал к {self.args.target_class}")
                 return EXIT_OK
             except UnsafeError as exc:
                 self.get_logger().warning(
                     f"target at search step {index} rejected for approach: {exc}"
                 )
+                self._publish_status(f"Отклонено для подъезда: {exc}; продолжаю поиск")
 
         if completed_steps != steps:
             raise UnsafeError("search ended before a complete 360 degree spin")
@@ -1440,6 +1460,7 @@ class BottleSearchNode(Node):
             "completed a full 360 degree search with no confirmed target "
             f"(odometry={math.degrees(measured_rotation):.1f} degrees)"
         )
+        self._publish_status(f"Не найдено: {self.args.target_class} не обнаружен после полного круга")
         return EXIT_NOT_FOUND
 
 
@@ -1565,10 +1586,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         exit_code = node.run()
     except UnsafeError as exc:
         node.get_logger().error(f"refusing to continue: {exc}")
+        node._publish_status(f"Остановлено: {exc}")
     except KeyboardInterrupt:
         node.request_stop("keyboard interrupt")
+        node._publish_status("Остановлено: прервано пользователем")
     except BaseException as exc:
         node.get_logger().error(f"unexpected failure: {type(exc).__name__}: {exc}")
+        node._publish_status(f"Остановлено: непредвиденная ошибка ({type(exc).__name__})")
     finally:
         node.emergency_stop()
         for signum, previous in previous_handlers.items():

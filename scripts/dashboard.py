@@ -234,7 +234,10 @@ class DashboardNode(Node):
                                  qos_profile_sensor_data)
         self.create_subscription(Imu, "/hardware/imu", self._on_imu,
                                  qos_profile_sensor_data)
-        self.create_subscription(String, "/goal/status", self._on_goal_status, 10)
+        # object_search.py publishes here, not goal_proxy.py's /goal/status
+        # (a different node for manual /goal navigation that the guarded
+        # search never uses) -- this is what actually reflects a real search.
+        self.create_subscription(String, "/search/status", self._on_goal_status, 10)
 
     def _on_battery(self, msg: Float32) -> None:
         with self.state.lock:
