@@ -329,7 +329,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 608210793}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.4924236, z: 0, w: 0.8703557}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.0033, y: 0.1389, z: -0.0366}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -357,8 +357,8 @@ MonoBehaviour:
   cameraBaseVisual: {fileID: 5949365509221047576}
   cameraVisual: {fileID: 1932389064805563632}
   ultrasonicBeamPoint: {fileID: 911752539}
-  s5PanAngle: 59
-  s6TiltAngle: 5.5
+  s5PanAngle: 0
+  s6TiltAngle: 0
   s5MinimumAngle: -75
   s5MaximumAngle: 75
   s6MinimumAngle: -30
@@ -1003,7 +1003,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1448038506}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.047978133, w: 0.99884844}
+  m_LocalRotation: {x: 0, y: 0, z: 8.612808e-10, w: 1}
   m_LocalPosition: {x: -0.0179, y: 0.0377, z: -0.0006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -1682,6 +1682,7 @@ GameObject:
   - component: {fileID: 2038589930}
   - component: {fileID: 2038589933}
   - component: {fileID: 2038589934}
+  - component: {fileID: 2038589935}
   m_Layer: 0
   m_Name: cam
   m_TagString: MainCamera
@@ -1829,6 +1830,27 @@ MonoBehaviour:
   m_RuntimeCameraEnable: 1
   m_ObservationStacks: 1
   m_Compression: 1
+--- !u!114 &2038589935
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2038589929}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ffb56f473b2cdc83a4f87c0c8e332f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SimulatedYoloCamera
+  targetBall: {fileID: 1876015842}
+  maxDetectionDistance: 2
+  horizontalFOV: 40
+  obstacleLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  isBallVisible: 0
+  relativeAngleX: 0
+  normalizedDistance: 0
 --- !u!23 &2532680635694712
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -1932,6 +1954,9 @@ GameObject:
   - component: {fileID: 919132147783449509}
   - component: {fileID: 919132147783449510}
   - component: {fileID: 919132147783449511}
+  - component: {fileID: 919132147783449514}
+  - component: {fileID: 919132147783449513}
+  - component: {fileID: 919132147783449512}
   m_Layer: 0
   m_Name: GFS-X Robot
   m_TagString: Untagged
@@ -2088,6 +2113,68 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   drawDebugRays: 1
+--- !u!114 &919132147783449512
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919132147783449508}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a5c9d521e5ef4759a8246a07d52221e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.ML-Agents::Unity.MLAgents.DecisionRequester
+  DecisionPeriod: 5
+  DecisionStep: 0
+  TakeActionsBetweenDecisions: 1
+--- !u!114 &919132147783449513
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919132147783449508}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88b6042bc9a5d4aa58d931eae49442e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.ML-Agents::Unity.MLAgents.Agent
+  agentParameters:
+    maxStep: 0
+  hasUpgradedFromAgentParameters: 1
+  MaxStep: 0
+--- !u!114 &919132147783449514
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919132147783449508}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d1c4e0b1822b495aa52bc52839ecb30, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.ML-Agents::Unity.MLAgents.Policies.BehaviorParameters
+  m_BrainParameters:
+    VectorObservationSize: 15
+    NumStackedVectorObservations: 4
+    m_ActionSpec:
+      m_NumContinuousActions: 3
+      BranchSizes: 01000000
+    VectorActionSize: 
+    VectorActionDescriptions: []
+    VectorActionSpaceType: 0
+    hasUpgradedBrainParametersWithActionSpec: 1
+  m_Model: {fileID: 0}
+  m_InferenceDevice: 0
+  m_BehaviorType: 0
+  m_BehaviorName: GFSX_Brain
+  TeamId: 0
+  m_UseChildSensors: 1
+  m_UseChildActuators: 1
+  m_DeterministicInference: 0
+  m_ObservableAttributeHandling: 0
 --- !u!23 &1003442069237556371
 MeshRenderer:
   m_ObjectHideFlags: 0
