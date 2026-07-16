@@ -30,7 +30,8 @@
     "method": null
   },
   "safety_validation": {
-    "measured_chassis_swept_radius_m": null,
+    "_measured_chassis_swept_radius_m_note": "0.152 = hypot(0.15/2, 0.265/2) from body 15x26.5cm, assuming rotation center = geometric center; UNVERIFIED, wheel placement not physically confirmed",
+    "measured_chassis_swept_radius_m": 0.152,
     "lidar_bearing_validated": false,
     "scan_plane_intersects_floor_target": false,
     "supervised_standoff_trials": 0

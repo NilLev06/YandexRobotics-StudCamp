@@ -137,6 +137,22 @@ docker compose -f docker-compose.dashboard.yaml up -d
 
 Остановить: `docker compose -f docker-compose.dashboard.yaml down`.
 
+## Единая страница ("центр управления")
+
+`docker-compose.portal.yaml` — одна страница на весь экран: слева живая
+картинка с камеры (YOLO-оверлей), справа — телеметрийный дашборд в iframe.
+Никакой отдельной логики, просто статический HTML, отданный
+`python3 -m http.server`. Требует уже запущенных `yolo-live` и `dashboard`.
+
+```sh
+cd ~/z_boys
+docker compose -f docker-compose.yolo-live.yaml up -d
+docker compose -f docker-compose.dashboard.yaml up -d
+docker compose -f docker-compose.portal.yaml up -d
+```
+
+Открыть: `http://<ip-ровера>:8090/`
+
 ## Карта из записанных данных
 
 `scripts/build_map_from_bag.sh` прогоняет `/scan` + `/tf` из уже записанной

@@ -1,0 +1,38 @@
+# Единая страница "центр управления": камера+YOLO слева, телеметрийный
+# дашборд справа (в iframe). Никакой отдельной логики — просто статический
+# HTML-файл, отданный стандартным http.server. Требует запущенных
+# yolo-live (порт 8091) и dashboard (порт 8092).
+
+services:
+  portal:
+    image: registry.robotics-lab.ru/robomarvel:v6
+    container_name: z-boys-portal
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 32
+    cpu_shares: 64
+    working_dir: /app
+    entrypoint:
+      - /usr/bin/python3
+      - -m
+      - http.server
+      - "8090"
+      - --bind
+      - "0.0.0.0"
+    volumes:
+      - ./scripts/portal:/app:ro
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    ports:
+      - "0.0.0.0:8090:8090"
+    stop_grace_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "2m"
+        max-file: "2"
