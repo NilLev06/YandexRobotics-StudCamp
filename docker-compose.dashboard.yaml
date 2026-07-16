@@ -34,6 +34,9 @@ services:
       - ./scripts/dashboard.py:/app/dashboard.py:ro
       # read-only bind so the disk-free reading matches the host, not the container overlay
       - /:/host-root:ro
+      # read-only bind so Wi-Fi signal strength reflects the host's real wlan0,
+      # not this container's own network namespace (which has no wireless iface)
+      - /proc/net/wireless:/proc/net/wireless:ro
     tmpfs:
       - /tmp:size=16m,mode=1777
     ports:

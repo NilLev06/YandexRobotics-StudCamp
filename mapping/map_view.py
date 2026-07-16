@@ -70,6 +70,9 @@ PAGE = """<!doctype html>
   .stage img, .stage canvas { display: block; max-width: 100%; height: auto; border-radius: 6px; }
   .stage canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
   #status { font-size: 12px; color: #8793a1; padding: 0 16px 10px; }
+  .presets { display: flex; gap: 8px; padding: 8px 16px 0; }
+  .presets button { background: #121822; color: #aeb8c4; border: 1px solid #1c2530; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .presets button:hover { background: #1c2530; color: #e8edf3; }
 </style>
 </head>
 <body>
@@ -78,7 +81,14 @@ PAGE = """<!doctype html>
   <label><input type="checkbox" id="layer-trail" checked><span class="ray" style="background:#7f77dd"></span>след</label>
   <label><input type="checkbox" id="layer-found" checked><span class="dot" style="background:#f6b73c"></span>подтверждённые объекты</label>
   <label><input type="checkbox" id="layer-sighted" checked><span class="ray" style="background:#5dcaa5"></span>замечено камерой (приблизительно)</label>
+  <label><input type="checkbox" id="layer-camera" checked><span class="ray" style="background:#ff9f68"></span>обзор камеры</label>
 </header>
+<div class="presets">
+  <button type="button" data-preset="all">Всё</button>
+  <button type="button" data-preset="occupancy">Только карта</button>
+  <button type="button" data-preset="trail">Только след</button>
+  <button type="button" data-preset="objects">Только объекты</button>
+</div>
 <div id="status">загрузка...</div>
 <main>
   <div class="stage">
@@ -94,6 +104,28 @@ PAGE = """<!doctype html>
   const cbTrail = document.getElementById('layer-trail');
   const cbFound = document.getElementById('layer-found');
   const cbSighted = document.getElementById('layer-sighted');
+  const cbCamera = document.getElementById('layer-camera');
+  const allLayers = [cbTrail, cbFound, cbSighted, cbCamera];
+
+  const PRESETS = {
+    all: [true, true, true, true],
+    occupancy: [false, false, false, false],
+    trail: [true, false, false, false],
+    objects: [false, true, true, false],
+  };
+  document.querySelectorAll('.presets button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const values = PRESETS[btn.dataset.preset];
+      allLayers.forEach((cb, i) => { cb.checked = values[i]; });
+    });
+  });
+
+  // Camera is assumed forward-facing (yaw offset 0 from base_link) -- the
+  // actual mounting angle has not been measured/calibrated. If extrinsics
+  // are ever validated, this should read the real yaw offset instead.
+  const CAMERA_YAW_OFFSET_RAD = 0;
+  const CAMERA_FOV_DEG = 60;
+  const CAMERA_RANGE_PX = 60;
 
   function resizeCanvas() {
     if (canvas.width !== base.clientWidth || canvas.height !== base.clientHeight) {
@@ -113,6 +145,7 @@ PAGE = """<!doctype html>
       parts.push(layers.map_received ? `карта ${layers.width}x${layers.height}, ${layers.resolution_m}м/клетка` : 'карта ещё не построена');
       parts.push(layers.robot_pose ? 'позиция ровера известна' : 'позиция ровера неизвестна');
       parts.push(`след: ${layers.trail.length} точек, объектов: ${layers.found.length}, замечено: ${layers.sighted.length}`);
+      parts.push('обзор камеры нарисован по допущению "смотрит вперёд" — реальный угол крепления не откалиброван');
       status.textContent = parts.join(' · ');
       base.src = '/map.jpg?t=' + Date.now();
       resizeCanvas();
@@ -142,14 +175,46 @@ PAGE = """<!doctype html>
       if (cbSighted.checked) {
         ctx.strokeStyle = '#5dcaa5';
         ctx.lineWidth = 2;
+        const pxPerMeter = scaleX / layers.resolution_m;
         for (const s of layers.sighted) {
           const [px, py] = toPx(s.x, s.y);
-          const tip = [px + 22 * Math.cos(-s.yaw), py + 22 * Math.sin(-s.yaw)];
+          // Ray length reflects the rough distance guess when we have one
+          // (fy_px measured + known class size); otherwise a short fixed
+          // stub that only shows direction, never a fabricated distance.
+          const rayPx = s.approx_distance_m != null
+            ? Math.max(14, Math.min(200, s.approx_distance_m * pxPerMeter))
+            : 22;
+          const tip = [px + rayPx * Math.cos(-s.yaw), py + rayPx * Math.sin(-s.yaw)];
           ctx.beginPath();
           ctx.moveTo(px, py);
           ctx.lineTo(tip[0], tip[1]);
           ctx.stroke();
+          if (s.approx_distance_m != null) {
+            ctx.fillStyle = '#5dcaa5';
+            ctx.font = '10px system-ui, sans-serif';
+            ctx.fillText(`~${s.approx_distance_m.toFixed(1)}м`, tip[0] + 3, tip[1]);
+          }
         }
+      }
+
+      if (cbCamera.checked && layers.robot_pose) {
+        const [px, py] = toPx(layers.robot_pose.x, layers.robot_pose.y);
+        const camYaw = layers.robot_pose.yaw_rad + CAMERA_YAW_OFFSET_RAD;
+        const halfFov = (CAMERA_FOV_DEG / 2) * Math.PI / 180;
+        const left = [px + CAMERA_RANGE_PX * Math.cos(-(camYaw - halfFov)),
+                     py + CAMERA_RANGE_PX * Math.sin(-(camYaw - halfFov))];
+        const right = [px + CAMERA_RANGE_PX * Math.cos(-(camYaw + halfFov)),
+                       py + CAMERA_RANGE_PX * Math.sin(-(camYaw + halfFov))];
+        ctx.fillStyle = 'rgba(255, 159, 104, 0.15)';
+        ctx.strokeStyle = 'rgba(255, 159, 104, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(left[0], left[1]);
+        ctx.lineTo(right[0], right[1]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
       }
 
       if (cbFound.checked) {
@@ -215,6 +280,7 @@ class SightedRay:
     y: float
     yaw: float
     at: float
+    approx_distance_m: float | None = None
 
 
 @dataclass
@@ -306,11 +372,15 @@ class MapViewNode(Node):
             x = float(payload["x"])
             y = float(payload["y"])
             yaw = float(payload["yaw"])
+            raw_distance = payload.get("approx_distance_m")
+            approx_distance_m = float(raw_distance) if raw_distance is not None else None
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             self.get_logger().warning(f"ignoring malformed /search/sighted message: {msg.data!r}")
             return
         with self.state.lock:
-            self.state.sighted.append(SightedRay(label, confidence, x, y, yaw, time.time()))
+            self.state.sighted.append(
+                SightedRay(label, confidence, x, y, yaw, time.time(), approx_distance_m)
+            )
             now = time.time()
             self.state.sighted = [
                 s for s in self.state.sighted if now - s.at < SIGHTED_STALE_S
@@ -417,7 +487,10 @@ class MapHandler(BaseHTTPRequestHandler):
             ],
             "sighted": [
                 {"class": s.label, "confidence": round(s.confidence, 2),
-                 "x": round(s.x, 3), "y": round(s.y, 3), "yaw": round(s.yaw, 3), "at": s.at}
+                 "x": round(s.x, 3), "y": round(s.y, 3), "yaw": round(s.yaw, 3), "at": s.at,
+                 "approx_distance_m": (
+                     round(s.approx_distance_m, 2) if s.approx_distance_m is not None else None
+                 )}
                 for s in sighted
             ],
         }

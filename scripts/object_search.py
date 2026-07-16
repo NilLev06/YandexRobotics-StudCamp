@@ -80,6 +80,57 @@ class BottleObservation:
     height: int
 
 
+# Very rough real-world object heights (meters), used only for an approximate
+# monocular distance guess on the uncalibrated "sighted" layer. This is NOT a
+# measurement: it assumes an upright, fully-framed object of typical size and
+# ignores tilt/perspective. Never used for navigation or safety decisions.
+APPROX_OBJECT_HEIGHT_M = {
+    "bottle": 0.25,
+    "cup": 0.10,
+    "chair": 0.85,
+    "person": 1.70,
+    "backpack": 0.45,
+    "suitcase": 0.60,
+    "potted plant": 0.35,
+    "tv": 0.55,
+    "laptop": 0.25,
+    "dog": 0.45,
+    "cat": 0.25,
+}
+
+
+def _approx_distance_m(
+    fy_px: float | None, bbox: tuple[float, float, float, float], label: str
+) -> float | None:
+    """Rough monocular distance from bbox pixel height and a typical
+    real-world size for the class. Returns None whenever any needed input is
+    missing -- this must never invent a number when it doesn't have one."""
+    if fy_px is None or fy_px <= 0.0:
+        return None
+    real_height_m = APPROX_OBJECT_HEIGHT_M.get(label.lower())
+    if real_height_m is None:
+        return None
+    _, y1, _, y2 = bbox
+    bbox_height_px = y2 - y1
+    if bbox_height_px <= 1.0:
+        return None
+    return round(real_height_m * fy_px / bbox_height_px, 2)
+
+
+def _read_camera_fy_px(path: str) -> float | None:
+    """Best-effort read of just the camera focal length, independent of the
+    full calibration lock (schema_version/validated/etc). This number alone
+    is harmless for a diagnostic distance guess -- unlike the full
+    lidar-camera calibration, it does not gate any motion decision."""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        value = payload.get("camera", {}).get("intrinsics", {}).get("fy_px")
+        return float(value) if value is not None else None
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
 @dataclass(frozen=True)
 class Intrinsics:
     width: int
@@ -1206,12 +1257,20 @@ class BottleSearchNode(Node):
         try:
             map_from_base = _ros_transform(transform)
             yaw = _yaw_from_quaternion(map_from_base.quaternion)
+            fy_px = _read_camera_fy_px(self.args.calibration)
+            approx_distance_m = _approx_distance_m(
+                fy_px, observation.bbox, self.args.target_class
+            )
             payload = json.dumps({
                 "class": self.args.target_class,
                 "confidence": round(observation.confidence, 2),
                 "x": round(map_from_base.translation[0], 3),
                 "y": round(map_from_base.translation[1], 3),
                 "yaw": round(yaw, 3),
+                # Rough monocular guess only -- null unless fy_px is measured
+                # and the class has a known typical size. Never a real
+                # measurement; never used for navigation.
+                "approx_distance_m": approx_distance_m,
             })
             self.sighted_publisher.publish(String(data=payload))
         except Exception as exc:  # never let a diagnostic publish break search
