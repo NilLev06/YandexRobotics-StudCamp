@@ -1,0 +1,10 @@
+GFS-X CLAW ROBOT DISTRIBUTION NOTICE
+
+This archive was assembled from the robot model, textures, and code already
+present in the project supplied by the project owner. No additional license
+or ownership claim is granted here for third-party model or texture assets.
+
+Before redistributing the archive publicly, verify that you have the right to
+redistribute the original XiaoR Geek GFS-X model and texture files. The custom
+Unity controller and packaging code does not change the licensing terms of
+those source assets.

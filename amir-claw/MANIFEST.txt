@@ -1,0 +1,29 @@
+Art/Generated/Treads/LeftTread.asset
+Art/Generated/Treads/Materials/LeftTread_0.mat
+Art/Generated/Treads/Materials/RightTread_0.mat
+Art/Generated/Treads/RightTread.asset
+Art/Models/Xiao-r GFS-X_1.fbx
+Art/Textures/Body/Body_Base_Color.png
+Art/Textures/Body/Body_Normal.png
+Art/Textures/Claw/Claw_Base_Color.png
+Art/Textures/Claw/Claw_Normal.png
+Art/Textures/Equipment/Equipment_Base_Color.png
+Art/Textures/Equipment/Equipment_Normal.png
+Art/Textures/Raspberry/Raspberry PI_Base_Color.png
+Art/Textures/Raspberry/Raspberry PI_Normal.png
+Editor/Inspectors/GfsxArmRigControllerEditor.cs
+Editor/Inspectors/GfsxSensorHeadRigControllerEditor.cs
+Editor/Setup/GfsxPackageSetup.cs
+Prefabs/GFS-X Robot - Full URP ML-Agents.prefab
+Prefabs/GFS-X Robot - Portable Core.prefab
+Runtime/Materials/Core/00_Claw_Jey_Key_3_0_BuiltIn.mat
+Runtime/Materials/Core/01_Equipment_Jey_Key_3_0_BuiltIn.mat
+Runtime/Materials/Core/02_Body_Jey_Key_3_0_BuiltIn.mat
+Runtime/Materials/Core/03_Raspberry_PI_Jey_Key_3_0_BuiltIn.mat
+Runtime/Materials/Core/04_LeftTread_0_BuiltIn.mat
+Runtime/Materials/Core/05_RightTread_0_BuiltIn.mat
+Runtime/Scripts/GfsxArmRigController.cs
+Runtime/Scripts/GfsxSensorHeadRigController.cs
+Runtime/Scripts/GripperController.cs
+Runtime/Scripts/TrackController.cs
+Runtime/Scripts/VirtualSensors.cs
