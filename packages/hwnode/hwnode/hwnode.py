@@ -175,6 +175,14 @@ class HardwareNode(Node):
             imu.header.frame_id = "base_link"
             imu.header.stamp = now
             imu.orientation_covariance = [-1.0] + [0.0] * 8
+            # Raw accelerometer counts, published for logging/telemetry only.
+            # Unlike gyro_x/y/z these have no known scale factor yet, so they
+            # are NOT m/s^2 -- covariance[0] = -1 keeps every consumer
+            # (EKF included) from treating them as a real measurement until
+            # someone determines the actual sensitivity and calibrates them.
+            imu.linear_acceleration.x = packet.accel_x
+            imu.linear_acceleration.y = packet.accel_y
+            imu.linear_acceleration.z = packet.accel_z
             imu.linear_acceleration_covariance = [-1.0] + [0.0] * 8
             imu.angular_velocity.x = packet.gyro_x
             imu.angular_velocity.y = packet.gyro_y
