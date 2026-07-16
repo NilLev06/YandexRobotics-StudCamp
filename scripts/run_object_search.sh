@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Launch the guarded object-search behavior without modifying the main rover tree.
+# Launch the guarded object-search behavior without modifying the main rover
+# tree. Pass --explore to use the frontier-driven exploration wrapper
+# instead of a single 360-degree circle -- see OBJECT_SEARCH.md.
 
 set -uo pipefail
 
@@ -7,12 +9,12 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 DEFAULT_CALIBRATION="$SCRIPT_DIR/../config/search_calibration.json"
 DEFAULT_TARGET_FILE="$SCRIPT_DIR/../config/target.txt"
 IMAGE="${OBJECT_SEARCH_IMAGE:-registry.robotics-lab.ru/robomarvel:v6}"
-CONTAINER_NAME="z-boys-object-search"
 NETWORK="${OBJECT_SEARCH_NETWORK:-robomarvel_default}"
 WAV_FILE="${OBJECT_SEARCH_WAV:-/tmp/object-not-found.wav}"
 CALIBRATION_FILE="$DEFAULT_CALIBRATION"
 TARGET_FILE="$DEFAULT_TARGET_FILE"
 TARGET_CLASS=""
+EXPLORE=0
 BEHAVIOR_ARGS=()
 
 usage() {
@@ -20,25 +22,36 @@ usage() {
 Usage: run_object_search.sh [launcher options] [behavior options]
 
 Launcher options:
-  --wav FILE           WAV played only after a completed 360-degree no-find
-  --calibration FILE   Calibration JSON mounted read-only into the behavior
-  --target FILE        File containing the target class name (default:
-                        config/target.txt); overridden by --target-class
-  -h, --help            Show this help and the behavior options
+  --explore             Use the frontier-driven exploration wrapper: if a
+                         full 360-degree circle finds nothing, drive to the
+                         nearest unexplored area of the map and search again
+  --wav FILE             WAV played only after a completed no-find
+  --calibration FILE     Calibration JSON mounted read-only into the behavior
+  --target FILE          File containing the target class name (default:
+                          config/target.txt); overridden by --target-class
+  -h, --help              Show this help and the behavior options
 
 Useful behavior options:
-  --target-class NAME  YOLO/COCO class to search for (overrides --target file)
-  --dry-run            Run every preflight without sending a motion goal
-  --search-only        Stop safely after confirming the target; do not approach
-  --step-deg N         Step-and-stare angle (default: 15)
-  --min-clearance-m M  Required all-around spin clearance (default: 0.35)
+  --target-class NAME    YOLO/COCO class to search for (overrides --target file)
+  --dry-run              Run every preflight without sending a motion goal
+  --search-only          Stop safely after confirming the target; do not approach
+  --step-deg N           Step-and-stare angle per search circle (default: 15)
+  --min-clearance-m M    Required all-around spin clearance (default: 0.35)
+  --max-cycles N         (--explore only) search+drive cycles before giving
+                         up (default: 8)
+  --max-runtime-s S      (--explore only) overall time budget in seconds
+                         (default: 1200)
 
-All other arguments are passed to object_search.py.
+All other arguments are passed to the behavior script.
 EOF
 }
 
 while (($#)); do
   case "$1" in
+    --explore)
+      EXPLORE=1
+      shift
+      ;;
     --wav)
       if (($# < 2)); then
         echo "ERROR: --wav needs a file path" >&2
@@ -82,6 +95,16 @@ while (($#)); do
   esac
 done
 
+if ((EXPLORE)); then
+  CONTAINER_NAME="z-boys-explore-search"
+  ENTRY_SCRIPT="explore_search.py"
+  LABEL="exploration search"
+else
+  CONTAINER_NAME="z-boys-object-search"
+  ENTRY_SCRIPT="object_search.py"
+  LABEL="search"
+fi
+
 fail() {
   echo "ERROR: $*" >&2
   exit 1
@@ -89,6 +112,10 @@ fail() {
 
 command -v docker >/dev/null 2>&1 || fail "docker is not installed"
 [[ -r "$SCRIPT_DIR/object_search.py" ]] || fail "missing $SCRIPT_DIR/object_search.py"
+if ((EXPLORE)); then
+  [[ -r "$SCRIPT_DIR/explore_search.py" ]] || fail "missing $SCRIPT_DIR/explore_search.py"
+  [[ -r "$SCRIPT_DIR/frontier.py" ]] || fail "missing $SCRIPT_DIR/frontier.py"
+fi
 [[ -r "$CALIBRATION_FILE" ]] || fail "missing calibration file: $CALIBRATION_FILE"
 
 if [[ -z "$TARGET_CLASS" ]]; then
@@ -133,12 +160,20 @@ fi
 interrupted=0
 stop_behavior() {
   interrupted=1
-  echo "Stopping object-search container..." >&2
+  echo "Stopping $LABEL container..." >&2
   docker stop --time 8 "$CONTAINER_NAME" >/dev/null 2>&1 || true
 }
 trap stop_behavior INT TERM HUP
 
-echo "Launching guarded search for '$TARGET_CLASS'. Motion remains disabled unless every safety gate passes."
+MOUNT_ARGS=(-v "$SCRIPT_DIR/object_search.py:/app/object_search.py:ro")
+if ((EXPLORE)); then
+  MOUNT_ARGS+=(
+    -v "$SCRIPT_DIR/explore_search.py:/app/explore_search.py:ro"
+    -v "$SCRIPT_DIR/frontier.py:/app/frontier.py:ro"
+  )
+fi
+
+echo "Launching guarded $LABEL for '$TARGET_CLASS'. Motion remains disabled unless every safety gate passes."
 docker run --rm --init \
   --name "$CONTAINER_NAME" \
   --network "$NETWORK" \
@@ -153,11 +188,11 @@ docker run --rm --init \
   -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
   -e ROS_DOMAIN_ID=0 \
   -e ROS_LOG_DIR=/tmp \
-  -v "$SCRIPT_DIR/object_search.py:/app/object_search.py:ro" \
+  "${MOUNT_ARGS[@]}" \
   -v "$CALIBRATION_FILE:/app/search_calibration.json:ro" \
   --entrypoint /usr/bin/python3 \
   "$IMAGE" \
-  -u /app/object_search.py \
+  -u "/app/$ENTRY_SCRIPT" \
   --calibration /app/search_calibration.json \
   --target-class "$TARGET_CLASS" \
   "${BEHAVIOR_ARGS[@]}"
@@ -170,10 +205,14 @@ fi
 
 case "$STATUS" in
   0)
-    echo "Object-search behavior completed successfully."
+    echo "$LABEL completed: '$TARGET_CLASS' was confirmed."
     ;;
   2)
-    echo "A complete 360-degree search found no confirmed '$TARGET_CLASS'; playing $WAV_FILE"
+    if ((EXPLORE)); then
+      echo "Exploration exhausted the reachable area; no confirmed '$TARGET_CLASS'. Playing $WAV_FILE"
+    else
+      echo "A complete 360-degree search found no confirmed '$TARGET_CLASS'; playing $WAV_FILE"
+    fi
     if ! command -v aplay >/dev/null 2>&1; then
       echo "ERROR: aplay is unavailable; cannot play the no-find WAV" >&2
       exit 1
@@ -184,7 +223,7 @@ case "$STATUS" in
     fi
     ;;
   *)
-    echo "Object search stopped with status $STATUS; no no-find audio was played." >&2
+    echo "$LABEL stopped with status $STATUS; no no-find audio was played." >&2
     ;;
 esac
 

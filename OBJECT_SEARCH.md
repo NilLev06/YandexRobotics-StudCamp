@@ -108,10 +108,10 @@ no-find search (after audio playback), and `130` for an interrupted run.
 
 ## Exploring when a single 360° circle isn't enough
 
-`scripts/run_explore_search.sh` wraps the same search behavior for rooms
-larger than one spin can cover: if a full 360° circle finds nothing, it picks
-the nearest unexplored frontier of the SLAM `/map` (a boundary between known
-free space and the unknown) and drives there with Nav2 before searching
+`scripts/run_object_search.sh --explore` wraps the same search behavior for
+rooms larger than one spin can cover: if a full 360° circle finds nothing, it
+picks the nearest unexplored frontier of the SLAM `/map` (a boundary between
+known free space and the unknown) and drives there with Nav2 before searching
 again, repeating until the target is confirmed, the reachable area is fully
 mapped, or `--max-cycles` / `--max-runtime-s` is reached.
 
@@ -125,9 +125,9 @@ testable with `python3 scripts/frontier.py`.
 
 ```sh
 echo "bottle" > config/target.txt
-./scripts/run_explore_search.sh --dry-run --search-only   # preflight only
-./scripts/run_explore_search.sh --search-only              # explore, don't approach
-./scripts/run_explore_search.sh --max-cycles 5              # full explore + approach
+./scripts/run_object_search.sh --explore --dry-run --search-only   # preflight only
+./scripts/run_object_search.sh --explore --search-only              # explore, don't approach
+./scripts/run_object_search.sh --explore --max-cycles 5              # full explore + approach
 ```
 
 Exit codes match `run_object_search.sh`: `0` on a confirmed target, `1` on an
