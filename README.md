@@ -1,1 +1,0 @@
-# YandexRobotics-StudCamp
