@@ -1681,7 +1681,6 @@ GameObject:
   - component: {fileID: 2038589931}
   - component: {fileID: 2038589930}
   - component: {fileID: 2038589933}
-  - component: {fileID: 2038589934}
   - component: {fileID: 2038589935}
   m_Layer: 0
   m_Name: cam
@@ -1809,27 +1808,6 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!114 &2038589934
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038589929}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 282f342c2ab144bf38be65d4d0c4e07d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Camera: {fileID: 2038589931}
-  m_SensorName: RobotVision
-  m_Width: 84
-  m_Height: 84
-  m_Grayscale: 0
-  m_ObservationType: 0
-  m_RuntimeCameraEnable: 1
-  m_ObservationStacks: 1
-  m_Compression: 1
 --- !u!114 &2038589935
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2189,18 +2167,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a455168d0b07b3baae2c354b3807f68, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RobotBrain
-  agentParameters:
-    maxStep: 0
-  hasUpgradedFromAgentParameters: 1
-  MaxStep: 0
-  trackController: {fileID: 0}
-  virtualSensors: {fileID: 0}
-  yoloCamera: {fileID: 2038589935}
-  gripperController: {fileID: 0}
-  armRig: {fileID: 0}
-  sensorHeadRig: {fileID: 608210795}
-  timePenalty: -0.001
-  ballInSightReward: 0.005
 --- !u!114 &919132147783449516
 MonoBehaviour:
   m_ObjectHideFlags: 0
