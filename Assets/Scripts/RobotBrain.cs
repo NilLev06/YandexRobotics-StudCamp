@@ -17,6 +17,8 @@ public class RobotBrain : Agent
     [Header("Reward Settings")]
     [SerializeField] private float timePenalty = -0.001f;
     [SerializeField] private float ballInSightReward = 0.005f;
+    [Header("Gripper Assistance")]
+    [SerializeField] private bool autoCloseGripperOnBallDetect = true;
 
     private Rigidbody body;
     private Vector3 startPosition;
@@ -214,6 +216,12 @@ public class RobotBrain : Agent
     {
         if (armRig == null) return;
 
+        if (ShouldAutoCloseGripper())
+        {
+            armRig.SetJawClosed();
+            return;
+        }
+
         switch (command)
         {
             case 1:
@@ -223,6 +231,22 @@ public class RobotBrain : Agent
                 armRig.SetJawOpen();
                 break;
         }
+    }
+
+    private bool ShouldAutoCloseGripper()
+    {
+        if (!autoCloseGripperOnBallDetect ||
+            armRig == null ||
+            virtualSensors == null ||
+            gripperController == null)
+        {
+            return false;
+        }
+
+        if (gripperController.IsHolding || armRig.IsJawClosed)
+            return false;
+
+        return virtualSensors.GripperIrDetected;
     }
 
     public override void Heuristic(in ActionBuffers actionsOut)
