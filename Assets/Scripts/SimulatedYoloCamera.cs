@@ -13,9 +13,9 @@ public class SimulatedYoloCamera : MonoBehaviour
 
     [Header("Domain randomization (imperfect vision)")]
     [SerializeField] private bool enableDomainRandomization = true;
-    [SerializeField, Range(0f, 0.15f)] private float angleNoiseStd = 0.04f;
-    [SerializeField, Range(0f, 0.15f)] private float distanceNoiseStd = 0.05f;
-    [SerializeField, Range(0f, 0.2f)] private float missDetectionChance = 0.05f;
+    [SerializeField, Range(0f, 0.15f)] private float angleNoiseStd = 0.03f;
+    [SerializeField, Range(0f, 0.15f)] private float distanceNoiseStd = 0.04f;
+    [SerializeField, Range(0f, 0.2f)] private float missDetectionChance = 0.04f;
     [SerializeField, Range(0f, 8f)] private float fovJitterDegrees = 3f;
     [SerializeField, Range(0f, 0.3f)] private float rangeJitterFraction = 0.08f;
 

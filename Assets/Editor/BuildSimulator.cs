@@ -5,7 +5,11 @@ using UnityEngine;
 
 public static class BuildSimulator
 {
-    private static readonly string[] Scenes = { "Assets/Scenes/P2_DigitalTwin.unity" };
+    private static readonly string[] Scenes =
+    {
+        "Assets/Scenes/P2_DigitalTwin.unity",
+        "Assets/Scenes/P3_DigitalTwin_FixedArm.unity"
+    };
     private const string LinuxBuildPath = "Build/GFSX_Simulator";
     private const string LinuxDataFolder = "Build/GFSX_Simulator_Data";
 

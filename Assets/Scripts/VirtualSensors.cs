@@ -39,13 +39,17 @@ public sealed class VirtualSensors : MonoBehaviour
     [SerializeField] private LayerMask sensingLayers = ~0;
     [SerializeField] private bool drawDebugRays = true;
 
+    [Header("Arm occlusion")]
+    [Tooltip("Arm hierarchy checked for beams blocked before external obstacles.")]
+    [SerializeField] private Transform armOcclusionRoot;
+
     [Header("Domain randomization (imperfect sensors)")]
     [SerializeField] private bool enableDomainRandomization = true;
-    [SerializeField, Range(0f, 0.08f)] private float ultrasonicNoiseStd = 0.025f;
-    [SerializeField, Range(0f, 0.1f)] private float ultrasonicBiasRange = 0.04f;
-    [SerializeField, Range(0f, 0.15f)] private float irFalsePositiveChance = 0.03f;
-    [SerializeField, Range(0f, 0.15f)] private float irFalseNegativeChance = 0.04f;
-    [SerializeField, Range(0f, 0.1f)] private float gripperIrFlipChance = 0.02f;
+    [SerializeField, Range(0f, 0.08f)] private float ultrasonicNoiseStd = 0.015f;
+    [SerializeField, Range(0f, 0.1f)] private float ultrasonicBiasRange = 0.02f;
+    [SerializeField, Range(0f, 0.15f)] private float irFalsePositiveChance = 0.02f;
+    [SerializeField, Range(0f, 0.15f)] private float irFalseNegativeChance = 0.03f;
+    [SerializeField, Range(0f, 0.1f)] private float gripperIrFlipChance = 0.015f;
 
     private readonly RaycastHit[] hitBuffer =
         new RaycastHit[MaximumPhysicsHits];
@@ -57,6 +61,8 @@ public sealed class VirtualSensors : MonoBehaviour
     private float leftIr;
     private float rightIr;
     private float gripperIr;
+    private bool leftIrOccludedByArm;
+    private bool rightIrOccludedByArm;
     private Collider detectedBallCollider;
     private Transform detectedBallTransform;
 
@@ -88,6 +94,8 @@ public sealed class VirtualSensors : MonoBehaviour
     public bool LeftIrDetected => leftIr > 0.5f;
     public bool RightIrDetected => rightIr > 0.5f;
     public bool GripperIrDetected => gripperIr > 0.5f;
+    public bool LeftIrOccludedByArm => leftIrOccludedByArm;
+    public bool RightIrOccludedByArm => rightIrOccludedByArm;
     public Collider DetectedBallCollider => detectedBallCollider;
     public GameObject DetectedBall => detectedBallTransform != null
         ? detectedBallTransform.gameObject
@@ -155,8 +163,8 @@ public sealed class VirtualSensors : MonoBehaviour
     public void SampleNow()
     {
         SampleUltrasonic();
-        leftIr = CorruptBinaryIr(SampleObstacleIR(leftIRPoint));
-        rightIr = CorruptBinaryIr(SampleObstacleIR(rightIRPoint));
+        leftIr = CorruptBinaryIr(SampleObstacleIR(leftIRPoint, out leftIrOccludedByArm));
+        rightIr = CorruptBinaryIr(SampleObstacleIR(rightIRPoint, out rightIrOccludedByArm));
         gripperIr = CorruptGripperIr(SampleGripperIR());
     }
 
@@ -272,14 +280,20 @@ public sealed class VirtualSensors : MonoBehaviour
         }
     }
 
-    private bool SampleObstacleIR(Transform sensorPoint)
+    private bool SampleObstacleIR(Transform sensorPoint, out bool occludedByArm)
     {
+        occludedByArm = false;
+
         if (sensorPoint == null)
             return true;
 
+        Vector3 origin = sensorPoint.position;
+        Vector3 direction = sensorPoint.forward;
+        occludedByArm = IsBeamOccludedByArm(origin, direction, obstacleIRRange);
+
         bool hitSomething = TryRaycastNearest(
-            sensorPoint.position,
-            sensorPoint.forward,
+            origin,
+            direction,
             obstacleIRRange,
             requireTargetBall: false,
             ignoreTargetBall: true,
@@ -287,12 +301,55 @@ public sealed class VirtualSensors : MonoBehaviour
             out _);
 
         DrawDebugBeam(
-            sensorPoint.position,
-            sensorPoint.forward,
+            origin,
+            direction,
             hitSomething ? nearestHit.distance : obstacleIRRange,
-            hitSomething ? Color.red : Color.cyan);
+            occludedByArm ? Color.yellow : (hitSomething ? Color.red : Color.cyan));
 
         return hitSomething;
+    }
+
+    private bool IsBeamOccludedByArm(Vector3 origin, Vector3 direction, float range)
+    {
+        if (armOcclusionRoot == null)
+            return false;
+
+        int hitCount = Physics.RaycastNonAlloc(
+            origin,
+            direction,
+            hitBuffer,
+            range,
+            sensingLayers,
+            QueryTriggerInteraction.Ignore);
+
+        float nearestArmDistance = float.PositiveInfinity;
+        float nearestExternalDistance = float.PositiveInfinity;
+        int count = Mathf.Min(hitCount, hitBuffer.Length);
+
+        for (int index = 0; index < count; index++)
+        {
+            RaycastHit candidate = hitBuffer[index];
+            Collider candidateCollider = candidate.collider;
+            if (candidateCollider == null)
+                continue;
+
+            if (TryFindTaggedTargetBall(candidateCollider.transform, out _))
+                continue;
+
+            if (candidateCollider.transform.IsChildOf(armOcclusionRoot))
+            {
+                nearestArmDistance = Mathf.Min(nearestArmDistance, candidate.distance);
+                continue;
+            }
+
+            if (candidateCollider.transform.IsChildOf(transform))
+                continue;
+
+            nearestExternalDistance = Mathf.Min(nearestExternalDistance, candidate.distance);
+        }
+
+        return nearestArmDistance < float.PositiveInfinity &&
+               nearestArmDistance <= nearestExternalDistance;
     }
 
     private bool SampleGripperIR()
@@ -496,6 +553,12 @@ public sealed class VirtualSensors : MonoBehaviour
             rightIRPoint = FindDescendant("RightIRPoint");
         if (gripperIRPoint == null)
             gripperIRPoint = FindDescendant("GripperIRPoint");
+        if (armOcclusionRoot == null)
+        {
+            GfsxArmRigController armRig = GetComponentInChildren<GfsxArmRigController>(true);
+            if (armRig != null)
+                armOcclusionRoot = armRig.transform;
+        }
     }
 
     private Transform FindDescendant(string objectName)

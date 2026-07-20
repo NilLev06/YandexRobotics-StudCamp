@@ -2138,7 +2138,7 @@ MonoBehaviour:
     VectorObservationSize: 15
     NumStackedVectorObservations: 4
     m_ActionSpec:
-      m_NumContinuousActions: 6
+      m_NumContinuousActions: 3
       BranchSizes: 03000000
     VectorActionSize: 
     VectorActionDescriptions: []
@@ -2147,7 +2147,7 @@ MonoBehaviour:
   m_Model: {fileID: 0}
   m_InferenceDevice: 0
   m_BehaviorType: 0
-  m_BehaviorName: GFSX_Brain_Mobile
+  m_BehaviorName: GFSX_Brain_Fixed
   TeamId: 0
   m_UseChildSensors: 1
   m_UseChildActuators: 1
@@ -2169,7 +2169,7 @@ MonoBehaviour:
     maxStep: 0
   hasUpgradedFromAgentParameters: 1
   MaxStep: 0
-  trainingMode: 1
+  trainingMode: 0
   trackController: {fileID: 919132147783449510}
   virtualSensors: {fileID: 919132147783449511}
   yoloCamera: {fileID: 2038589935}

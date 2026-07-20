@@ -65,6 +65,11 @@ public sealed class TrackController : MonoBehaviour
     private float linearSpeed;
     private float yawRateDegrees;
 
+    private float baselineMoveSpeed;
+    private float baselineTurnSpeed;
+    private float baselineMaxPwmStep;
+    private bool driveBaselineCaptured;
+
     public float GasCommand => gasCommand;
     public float SteeringCommand => steeringCommand;
     public float LeftPwm => leftPwm;
@@ -261,6 +266,43 @@ public sealed class TrackController : MonoBehaviour
                 body.angularVelocity = Vector3.zero;
             }
         }
+    }
+
+    /// <summary>
+    /// Stores the authored drive calibration before per-episode randomization.
+    /// </summary>
+    public void CaptureDriveBaseline()
+    {
+        baselineMoveSpeed = moveSpeed;
+        baselineTurnSpeed = turnSpeed;
+        baselineMaxPwmStep = maxPwmStep;
+        driveBaselineCaptured = true;
+    }
+
+    /// <summary>
+    /// Randomizes motor dynamics for domain randomization (Practice 5).
+    /// </summary>
+    public void ApplyTrainingRandomization()
+    {
+        if (!driveBaselineCaptured)
+            CaptureDriveBaseline();
+
+        moveSpeed = Random.Range(0.3f, 0.7f);
+        turnSpeed = Random.Range(80f, 160f);
+        maxPwmStep = Random.Range(5f, 20f);
+    }
+
+    /// <summary>
+    /// Restores the authored drive calibration after training randomization.
+    /// </summary>
+    public void RestoreDriveBaseline()
+    {
+        if (!driveBaselineCaptured)
+            return;
+
+        moveSpeed = baselineMoveSpeed;
+        turnSpeed = baselineTurnSpeed;
+        maxPwmStep = baselineMaxPwmStep;
     }
 
     private void OnDisable()

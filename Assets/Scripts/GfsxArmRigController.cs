@@ -56,7 +56,7 @@ public sealed class GfsxArmRigController : MonoBehaviour
     [SerializeField] private float s4Closure;
 
     [Header("Allowed servo angles (editable in Unity)")]
-    [SerializeField, Range(-180f, 0f)] private float s1MinimumAngle = -35f;
+    [SerializeField, Range(-180f, 0f)] private float s1MinimumAngle = -55f;
     [SerializeField, Range(0f, 180f)] private float s1MaximumAngle = 55f;
     [SerializeField, Range(-180f, 0f)] private float s2MinimumAngle = -75f;
     [SerializeField, Range(0f, 180f)] private float s2MaximumAngle = 75f;
@@ -92,9 +92,11 @@ public sealed class GfsxArmRigController : MonoBehaviour
     [SerializeField] private float armDegreesPerSecond = 35f;
     [SerializeField] private bool showControlsOverlay = true;
 
-    [Header("Episode start pose (claw parallel to floor, clear of ground)")]
-    [SerializeField] private float floorPickupS1 = -35f;
-    [SerializeField] private float floorPickupS2 = -2f;
+    [Header("Episode start pose (straight arm, S1 sets height)")]
+    [Tooltip("S1 shoulder — only joint lowered for floor pickup.")]
+    [SerializeField] private float floorPickupS1 = -38f;
+    [Tooltip("S2 elbow — 0° keeps the arm strictly straight.")]
+    [SerializeField] private float floorPickupS2 = 0f;
     [SerializeField] private float floorPickupS3 = 90f;
 
     public bool KeyboardControlEnabled
@@ -590,9 +592,7 @@ public sealed class GfsxArmRigController : MonoBehaviour
     }
 
     /// <summary>
-    /// Floor-ready pose: claw nearly parallel to the ground (~6°), tip above
-    /// the floor, HoldPoint near Ø5 cm ball height. S3=+90° rolls the wrist so
-    /// the mouth faces forward instead of diving into the ball/floor.
+    /// Straight arm (S2=0). Only S1 shoulder sets height.
     /// </summary>
     public void SetFloorPickupPose()
     {

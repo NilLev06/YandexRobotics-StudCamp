@@ -33,6 +33,15 @@ public sealed class TrainingArena : MonoBehaviour
     [Header("Ball spawn (pose only)")]
     [SerializeField] private float minBallDistanceFromRobot = 0.7f;
     [SerializeField] private float maxBallDistanceFromRobot = 2.4f;
+    [Tooltip("Minimum clearance from arena walls when placing the ball (metres).")]
+    [SerializeField, Min(0.1f)] private float ballWallClearance = 0.55f;
+
+    [Header("Ball domain randomization")]
+    [SerializeField] private bool randomizeBallPhysics = true;
+    [Tooltip("Per guide P5: ball mass multiplier range (±100% from baseline).")]
+    [SerializeField] private Vector2 ballMassMultiplierRange = new Vector2(0.5f, 2.0f);
+    [Tooltip("Per guide P5: ball scale multiplier range (±20%).")]
+    [SerializeField] private Vector2 ballScaleMultiplierRange = new Vector2(0.8f, 1.2f);
 
     [Header("Obstacles 0.36 x 0.24 x 0.14 m (± size tolerance)")]
     [SerializeField] private bool spawnObstacles = true;
@@ -54,6 +63,7 @@ public sealed class TrainingArena : MonoBehaviour
     private Vector3 robotLocalStart;
     private Quaternion robotLocalStartRotation;
     private bool scalesCached;
+    private float baselineBallMass = 0.05f;
     private Material runtimeBallMaterial;
     private Material runtimeObstacleMaterial;
 
@@ -102,9 +112,30 @@ public sealed class TrainingArena : MonoBehaviour
         PlaceRobot();
         PlaceBall();
         EnforceFixedScales();
+        ApplyBallPhysicsRandomization();
         if (spawnObstacles)
             RebuildObstacles();
         Physics.SyncTransforms();
+    }
+
+    private void ApplyBallPhysicsRandomization()
+    {
+        if (!randomizeBallPhysics || targetBall == null)
+            return;
+
+        float scaleMultiplier = Random.Range(
+            ballScaleMultiplierRange.x,
+            ballScaleMultiplierRange.y);
+        targetBall.localScale = ballScale * scaleMultiplier;
+
+        if (ballBody != null)
+        {
+            float baselineMass = baselineBallMass > 0.0001f ? baselineBallMass : 0.05f;
+            ballBody.mass = baselineMass * Random.Range(
+                ballMassMultiplierRange.x,
+                ballMassMultiplierRange.y);
+            ballBody.WakeUp();
+        }
     }
 
     public Vector3 ArenaToWorld(Vector3 localPosition)
@@ -137,6 +168,9 @@ public sealed class TrainingArena : MonoBehaviour
 
         if (targetBall != null && ballBody == null)
             ballBody = targetBall.GetComponent<Rigidbody>();
+
+        if (ballBody != null && baselineBallMass <= 0.0001f)
+            baselineBallMass = Mathf.Max(0.01f, ballBody.mass);
 
         if (yoloCamera != null && targetBall != null && yoloCamera.targetBall != targetBall)
             yoloCamera.targetBall = targetBall;
@@ -246,10 +280,14 @@ public sealed class TrainingArena : MonoBehaviour
 
         Vector3 robotWorld = agent != null ? agent.transform.position : transform.position;
         Vector3 chosen = ArenaToWorld(new Vector3(1.2f, ballHeight, 0f));
+        float ballRadius = GetBallHorizontalRadius();
 
         for (int attempt = 0; attempt < maxPlacementAttempts; attempt++)
         {
-            Vector3 local = RandomPointOnFloor(ballHeight, 0.25f);
+            Vector3 local = RandomBallPointOnFloor();
+            if (!IsInsidePlayable(local.x, local.z, ballWallClearance + ballRadius))
+                continue;
+
             Vector3 world = ArenaToWorld(local);
             float distance = HorizontalDistance(world, robotWorld);
             if (distance < minBallDistanceFromRobot || distance > maxBallDistanceFromRobot)
@@ -448,6 +486,17 @@ public sealed class TrainingArena : MonoBehaviour
 
         for (int i = obstaclesRoot.childCount - 1; i >= 0; i--)
             Destroy(obstaclesRoot.GetChild(i).gameObject);
+    }
+
+    private Vector3 RandomBallPointOnFloor()
+    {
+        float inset = ballWallClearance + GetBallHorizontalRadius();
+        return RandomPointOnFloor(ballHeight, inset);
+    }
+
+    private float GetBallHorizontalRadius()
+    {
+        return Mathf.Max(0.01f, ballScale.x * 0.5f);
     }
 
     private Vector3 RandomPointOnFloor(float y, float edgeInset)
