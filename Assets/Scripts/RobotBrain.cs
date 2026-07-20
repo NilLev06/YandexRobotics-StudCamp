@@ -12,63 +12,101 @@ public class RobotBrain : Agent
     [SerializeField] private GripperController gripperController;
     [SerializeField] private GfsxArmRigController armRig;
     [SerializeField] private GfsxSensorHeadRigController sensorHeadRig;
+    [SerializeField] private TrainingArena trainingArena;
 
     [Header("Reward Settings")]
     [SerializeField] private float timePenalty = -0.001f;
     [SerializeField] private float ballInSightReward = 0.005f;
 
+    private Rigidbody body;
     private Vector3 startPosition;
+    private Quaternion startRotation;
     private float lastKnownBallDirection = 0f;
     private float timeSinceLastDetection = 0f;
     private float previousDistanceToBall = float.MaxValue;
 
     public override void Initialize()
     {
+        body = GetComponent<Rigidbody>();
+
         if (trackController == null) trackController = GetComponent<TrackController>();
         if (virtualSensors == null) virtualSensors = GetComponent<VirtualSensors>();
-        if (gripperController == null) gripperController = GetComponentInParent<GripperController>();
+        if (yoloCamera == null) yoloCamera = GetComponentInChildren<SimulatedYoloCamera>();
+        if (gripperController == null) gripperController = GetComponentInChildren<GripperController>();
         if (armRig == null) armRig = GetComponentInChildren<GfsxArmRigController>();
         if (sensorHeadRig == null) sensorHeadRig = GetComponentInChildren<GfsxSensorHeadRigController>();
+        if (trainingArena == null) trainingArena = GetComponentInParent<TrainingArena>();
 
-        startPosition = transform.position;
+        startPosition = body != null ? body.position : transform.position;
+        startRotation = body != null ? body.rotation : transform.rotation;
 
         if (trackController != null) trackController.KeyboardControlEnabled = false;
         if (sensorHeadRig != null) sensorHeadRig.KeyboardControlEnabled = false;
-        if (armRig != null) SetPrivateField(armRig, "readKeyboard", false);
+        if (armRig != null) armRig.KeyboardControlEnabled = false;
     }
 
     public override void OnEpisodeBegin()
     {
-        transform.position = startPosition;
-        transform.rotation = Quaternion.identity;
-
         if (trackController != null) trackController.Stop(immediate: true);
 
         if (gripperController != null && gripperController.IsHolding)
-        {
             gripperController.Release();
+
+        if (sensorHeadRig != null) sensorHeadRig.ResetToNeutral();
+        if (armRig != null) armRig.SetFloorPickupPose();
+
+        if (virtualSensors != null)
+            virtualSensors.RandomizeEpisodeNoise();
+        if (yoloCamera != null)
+            yoloCamera.RandomizeEpisodeNoise();
+
+        if (trainingArena != null)
+        {
+            trainingArena.ResetEpisodeLayout();
+        }
+        else
+        {
+            TeleportToArenaPose(startPosition, startRotation);
         }
 
-        if (sensorHeadRig != null)
-        {
-            SetPrivateField(sensorHeadRig, "s5PanAngle", 0f);
-            SetPrivateField(sensorHeadRig, "s6TiltAngle", 0f);
-        }
-
-        if (armRig != null)
-        {
-            SetPrivateField(armRig, "s4Closure", armRig.S4OpenPositionDegrees);
-        }
+        Physics.SyncTransforms();
 
         lastKnownBallDirection = 0f;
         timeSinceLastDetection = 0f;
         previousDistanceToBall = float.MaxValue;
     }
 
+    /// <summary>
+    /// Used by TrainingArena to place the robot after layout randomization.
+    /// </summary>
+    public void TeleportToArenaPose(Vector3 worldPosition, Quaternion worldRotation)
+    {
+        if (trackController != null)
+            trackController.Stop(immediate: true);
+
+        if (body != null)
+        {
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            body.position = worldPosition;
+            body.rotation = worldRotation;
+            body.WakeUp();
+        }
+        else
+        {
+            transform.SetPositionAndRotation(worldPosition, worldRotation);
+        }
+
+        startPosition = worldPosition;
+        startRotation = worldRotation;
+    }
+
     public override void CollectObservations(VectorSensor sensor)
     {
         if (yoloCamera != null)
         {
+            yoloCamera.RefreshDetection();
+
             if (yoloCamera.IsBallVisible)
             {
                 timeSinceLastDetection = 0f;
@@ -80,9 +118,11 @@ public class RobotBrain : Agent
             }
         }
 
-        Vector3 offsetFromStart = transform.position - startPosition;
+        Vector3 currentPosition = body != null ? body.position : transform.position;
+        Vector3 offsetFromStart = currentPosition - startPosition;
 
-        float headingDegrees = transform.eulerAngles.y;
+        Quaternion currentRotation = body != null ? body.rotation : transform.rotation;
+        float headingDegrees = currentRotation.eulerAngles.y;
         if (headingDegrees > 180f) headingDegrees -= 360f;
         float normalizedHeading = headingDegrees / 180f;
 
@@ -119,21 +159,17 @@ public class RobotBrain : Agent
         float servoPanCmd = actions.ContinuousActions[2];
 
         if (trackController != null)
-        {
             trackController.SetCommand(moveCmd, turnCmd);
-        }
 
         if (sensorHeadRig != null)
         {
             float degreesPerSecond = 60f;
             float newPan = sensorHeadRig.S5PanAngle + (servoPanCmd * degreesPerSecond * Time.fixedDeltaTime);
             newPan = Mathf.Clamp(newPan, sensorHeadRig.S5MinimumAngle, sensorHeadRig.S5MaximumAngle);
-            SetPrivateField(sensorHeadRig, "s5PanAngle", newPan);
+            sensorHeadRig.SetPan(newPan);
         }
 
-        int gripperCmd = actions.DiscreteActions[0];
-        ExecuteGripperAction(gripperCmd);
-
+        ExecuteGripperAction(actions.DiscreteActions[0]);
         EvaluateRewards();
     }
 
@@ -150,7 +186,8 @@ public class RobotBrain : Agent
 
         if (yoloCamera != null && yoloCamera.targetBall != null)
         {
-            float currentDistance = Vector3.Distance(transform.position, yoloCamera.targetBall.position);
+            Vector3 robotPosition = body != null ? body.position : transform.position;
+            float currentDistance = Vector3.Distance(robotPosition, yoloCamera.targetBall.position);
 
             if (previousDistanceToBall < float.MaxValue)
             {
@@ -163,9 +200,7 @@ public class RobotBrain : Agent
         if (virtualSensors != null)
         {
             if (virtualSensors.LeftIrDetected || virtualSensors.RightIrDetected || virtualSensors.UltrasonicNormalized < 0.1f)
-            {
                 AddReward(-0.01f);
-            }
         }
 
         if (gripperController != null && gripperController.IsHolding)
@@ -181,13 +216,11 @@ public class RobotBrain : Agent
 
         switch (command)
         {
-            case 0:
-                break;
             case 1:
-                SetPrivateField(armRig, "s4Closure", armRig.S4ClosedPositionDegrees);
+                armRig.SetJawClosed();
                 break;
             case 2:
-                SetPrivateField(armRig, "s4Closure", armRig.S4OpenPositionDegrees);
+                armRig.SetJawOpen();
                 break;
         }
     }
@@ -196,22 +229,9 @@ public class RobotBrain : Agent
     {
         var continuousActions = actionsOut.ContinuousActions;
         var discreteActions = actionsOut.DiscreteActions;
-
-        continuousActions[0] = Input.GetAxisRaw("Vertical");
-        continuousActions[1] = Input.GetAxisRaw("Horizontal");
-
-        if (Input.GetKey(KeyCode.Q)) continuousActions[2] = -1f;
-        else if (Input.GetKey(KeyCode.E)) continuousActions[2] = 1f;
-        else continuousActions[2] = 0f;
-
-        if (Input.GetKey(KeyCode.Alpha1)) discreteActions[0] = 1;
-        else if (Input.GetKey(KeyCode.Alpha2)) discreteActions[0] = 2;
-        else discreteActions[0] = 0;
-    }
-
-    private void SetPrivateField(object target, string fieldName, object value)
-    {
-        var field = target.GetType().GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (field != null) field.SetValue(target, value);
+        continuousActions[0] = 0f;
+        continuousActions[1] = 0f;
+        continuousActions[2] = 0f;
+        discreteActions[0] = 0;
     }
 }

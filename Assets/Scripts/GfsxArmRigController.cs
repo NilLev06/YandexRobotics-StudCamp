@@ -92,6 +92,17 @@ public sealed class GfsxArmRigController : MonoBehaviour
     [SerializeField] private float armDegreesPerSecond = 35f;
     [SerializeField] private bool showControlsOverlay = true;
 
+    [Header("Episode start pose (claw parallel to floor, clear of ground)")]
+    [SerializeField] private float floorPickupS1 = -35f;
+    [SerializeField] private float floorPickupS2 = -2f;
+    [SerializeField] private float floorPickupS3 = 90f;
+
+    public bool KeyboardControlEnabled
+    {
+        get => readKeyboard;
+        set => readKeyboard = value;
+    }
+
     [Header("Calibrated servo axes")]
     [SerializeField] private Vector3 s1LocalAxis = Vector3.forward;
     [SerializeField, FormerlySerializedAs("s3LocalAxis")]
@@ -576,6 +587,21 @@ public sealed class GfsxArmRigController : MonoBehaviour
             SetJawClosed();
         else
             SetJawOpen();
+    }
+
+    /// <summary>
+    /// Floor-ready pose: claw nearly parallel to the ground (~6°), tip above
+    /// the floor, HoldPoint near Ø5 cm ball height. S3=+90° rolls the wrist so
+    /// the mouth faces forward instead of diving into the ball/floor.
+    /// </summary>
+    public void SetFloorPickupPose()
+    {
+        s1Angle = floorPickupS1;
+        s2Angle = floorPickupS2;
+        s3WristRollAngle = floorPickupS3;
+        s4Closure = s4MinimumClosureCommand;
+        ClampCommands();
+        ApplyPose();
     }
 
     [ContextMenu("Reset Servo Axes To Neutral")]

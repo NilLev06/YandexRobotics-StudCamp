@@ -363,9 +363,9 @@ MonoBehaviour:
   s5MaximumAngle: 75
   s6MinimumAngle: -30
   s6MaximumAngle: 45
-  readKeyboard: 1
+  readKeyboard: 0
   degreesPerSecond: 45
-  showControlsOverlay: 1
+  showControlsOverlay: 0
   s5YawLocalAxis: {x: 0, y: 1, z: 0}
   s6PitchLocalAxis: {x: 0, y: 0, z: 1}
   bindPoseCaptured: 1
@@ -416,7 +416,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 615539459}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: -0.19680184, w: 0.9804433}
+  m_LocalRotation: {x: -0.0, y: -0.0, z: -0.3007057995042731, w: 0.9537169507482269}
   m_LocalPosition: {x: 0.1923, y: 0.0818, z: 0.0356}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -656,7 +656,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1119891739}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.06104855, w: 0.99813485}
+  m_LocalRotation: {x: -0.0, y: -0.0, z: -0.01745240643728351, w: 0.9998476951563913}
   m_LocalPosition: {x: 0.0519, y: 0.0269, z: -0.0012}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -1067,7 +1067,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1754349495}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.63397604, y: -0.31274852, z: 0.01621043, w: 0.7071068}
+  m_LocalRotation: {x: 0.6339760329312962, y: 0.3127484799584268, z: -0.016210427273499684, w: 0.7071067811865476}
   m_LocalPosition: {x: 0.0236, y: 0.0446, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -1448,7 +1448,7 @@ Transform:
   m_GameObject: {fileID: 1876015837}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.43, y: 0.026, z: 0.035}
+  m_LocalPosition: {x: 0.43, y: 0.025, z: 0.035}
   m_LocalScale: {x: 0.05, y: 0.05, z: 0.05}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1825,7 +1825,7 @@ MonoBehaviour:
   horizontalFOV: 40
   obstacleLayers:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 4294967295
   isBallVisible: 0
   relativeAngleX: 0
   normalizedDistance: 0
@@ -1933,9 +1933,7 @@ GameObject:
   - component: {fileID: 919132147783449510}
   - component: {fileID: 919132147783449511}
   - component: {fileID: 919132147783449514}
-  - component: {fileID: 919132147783449513}
   - component: {fileID: 919132147783449512}
-  - component: {fileID: 919132147783449515}
   - component: {fileID: 919132147783449516}
   m_Layer: 0
   m_Name: GFS-X Robot
@@ -1966,9 +1964,9 @@ MonoBehaviour:
   lowerJaw: {fileID: 5989947614966679140}
   holdPoint: {fileID: 1610884314}
   gripperIrPoint: {fileID: 478565367}
-  s1Angle: -22.7
-  s2Angle: 7
-  s3WristRollAngle: -90
+  s1Angle: -35
+  s2Angle: -2
+  s3WristRollAngle: 90
   s4Closure: 35
   s1MinimumAngle: -35
   s1MaximumAngle: 55
@@ -1981,9 +1979,12 @@ MonoBehaviour:
   s4MaximumClosureLimit: 85
   closedJawOpeningAngle: 0
   openJawOpeningAngle: 20
-  readKeyboard: 1
+  readKeyboard: 0
   armDegreesPerSecond: 35
-  showControlsOverlay: 1
+  showControlsOverlay: 0
+  floorPickupS1: -35
+  floorPickupS2: -2
+  floorPickupS3: 90
   s1LocalAxis: {x: 0, y: 0, z: 1}
   s2LocalAxis: {x: 0, y: 0, z: 1}
   s3WristRollLocalAxis: {x: 0.8965775, y: 0.44229314, z: -0.022925006}
@@ -2055,7 +2056,7 @@ MonoBehaviour:
   body: {fileID: 1984628473}
   forwardAxis: 0
   invertForward: 0
-  readKeyboard: 1
+  readKeyboard: 0
   moveSpeed: 0.57
   turnSpeed: 120
   turnK: 0.3
@@ -2108,22 +2109,6 @@ MonoBehaviour:
   DecisionPeriod: 5
   DecisionStep: 0
   TakeActionsBetweenDecisions: 1
---- !u!114 &919132147783449513
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 919132147783449508}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88b6042bc9a5d4aa58d931eae49442e5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.ML-Agents::Unity.MLAgents.Agent
-  agentParameters:
-    maxStep: 0
-  hasUpgradedFromAgentParameters: 1
-  MaxStep: 0
 --- !u!114 &919132147783449514
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2141,7 +2126,7 @@ MonoBehaviour:
     NumStackedVectorObservations: 4
     m_ActionSpec:
       m_NumContinuousActions: 3
-      BranchSizes: 01000000
+      BranchSizes: 03000000
     VectorActionSize: 
     VectorActionDescriptions: []
     VectorActionSpaceType: 0
@@ -2155,18 +2140,6 @@ MonoBehaviour:
   m_UseChildActuators: 1
   m_DeterministicInference: 0
   m_ObservableAttributeHandling: 0
---- !u!114 &919132147783449515
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 919132147783449508}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0a455168d0b07b3baae2c354b3807f68, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RobotBrain
 --- !u!114 &919132147783449516
 MonoBehaviour:
   m_ObjectHideFlags: 0

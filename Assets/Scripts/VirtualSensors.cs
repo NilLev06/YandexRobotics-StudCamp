@@ -1,5 +1,5 @@
-using System;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// Virtual equivalents of the GFS-X ultrasonic and infrared sensors.
@@ -39,6 +39,14 @@ public sealed class VirtualSensors : MonoBehaviour
     [SerializeField] private LayerMask sensingLayers = ~0;
     [SerializeField] private bool drawDebugRays = true;
 
+    [Header("Domain randomization (imperfect sensors)")]
+    [SerializeField] private bool enableDomainRandomization = true;
+    [SerializeField, Range(0f, 0.08f)] private float ultrasonicNoiseStd = 0.025f;
+    [SerializeField, Range(0f, 0.1f)] private float ultrasonicBiasRange = 0.04f;
+    [SerializeField, Range(0f, 0.15f)] private float irFalsePositiveChance = 0.03f;
+    [SerializeField, Range(0f, 0.15f)] private float irFalseNegativeChance = 0.04f;
+    [SerializeField, Range(0f, 0.1f)] private float gripperIrFlipChance = 0.02f;
+
     private readonly RaycastHit[] hitBuffer =
         new RaycastHit[MaximumPhysicsHits];
     private readonly Collider[] overlapBuffer =
@@ -51,6 +59,12 @@ public sealed class VirtualSensors : MonoBehaviour
     private float gripperIr;
     private Collider detectedBallCollider;
     private Transform detectedBallTransform;
+
+    private float episodeUltrasonicBias;
+    private float episodeUltrasonicNoiseStd;
+    private float episodeIrFalsePositive;
+    private float episodeIrFalseNegative;
+    private float episodeGripperFlip;
 
     public Transform CenterPoint => centerPoint;
     public Transform LeftIRPoint => leftIRPoint;
@@ -97,7 +111,30 @@ public sealed class VirtualSensors : MonoBehaviour
     private void Awake()
     {
         AutoAssignMissingAnchors();
+        RandomizeEpisodeNoise();
         SampleNow();
+    }
+
+    /// <summary>
+    /// Draws a new per-episode noise profile for imperfect physical sensors.
+    /// </summary>
+    public void RandomizeEpisodeNoise()
+    {
+        if (!enableDomainRandomization)
+        {
+            episodeUltrasonicBias = 0f;
+            episodeUltrasonicNoiseStd = 0f;
+            episodeIrFalsePositive = 0f;
+            episodeIrFalseNegative = 0f;
+            episodeGripperFlip = 0f;
+            return;
+        }
+
+        episodeUltrasonicBias = Random.Range(-ultrasonicBiasRange, ultrasonicBiasRange);
+        episodeUltrasonicNoiseStd = ultrasonicNoiseStd * Random.Range(0.5f, 1.5f);
+        episodeIrFalsePositive = irFalsePositiveChance * Random.Range(0.5f, 1.5f);
+        episodeIrFalseNegative = irFalseNegativeChance * Random.Range(0.5f, 1.5f);
+        episodeGripperFlip = gripperIrFlipChance * Random.Range(0.5f, 1.5f);
     }
 
     private void FixedUpdate()
@@ -118,9 +155,31 @@ public sealed class VirtualSensors : MonoBehaviour
     public void SampleNow()
     {
         SampleUltrasonic();
-        leftIr = SampleObstacleIR(leftIRPoint) ? 1f : 0f;
-        rightIr = SampleObstacleIR(rightIRPoint) ? 1f : 0f;
-        gripperIr = SampleGripperIR() ? 1f : 0f;
+        leftIr = CorruptBinaryIr(SampleObstacleIR(leftIRPoint));
+        rightIr = CorruptBinaryIr(SampleObstacleIR(rightIRPoint));
+        gripperIr = CorruptGripperIr(SampleGripperIR());
+    }
+
+    private float CorruptBinaryIr(bool detected)
+    {
+        if (!enableDomainRandomization)
+            return detected ? 1f : 0f;
+
+        if (detected && Random.value < episodeIrFalseNegative)
+            return 0f;
+        if (!detected && Random.value < episodeIrFalsePositive)
+            return 1f;
+        return detected ? 1f : 0f;
+    }
+
+    private float CorruptGripperIr(bool detected)
+    {
+        if (!enableDomainRandomization)
+            return detected ? 1f : 0f;
+
+        if (Random.value < episodeGripperFlip)
+            return detected ? 0f : 1f;
+        return detected ? 1f : 0f;
     }
 
     public void RefreshReadings()
@@ -201,6 +260,16 @@ public sealed class VirtualSensors : MonoBehaviour
 
         ultrasonicNormalized = Mathf.Clamp01(
             ultrasonicDistanceMetres / ultrasonicRange);
+
+        if (enableDomainRandomization)
+        {
+            float noisyMetres = ultrasonicDistanceMetres +
+                episodeUltrasonicBias +
+                SampleGaussian(0f, episodeUltrasonicNoiseStd * ultrasonicRange);
+            noisyMetres = Mathf.Clamp(noisyMetres, 0f, ultrasonicRange);
+            ultrasonicDistanceMetres = noisyMetres;
+            ultrasonicNormalized = Mathf.Clamp01(noisyMetres / ultrasonicRange);
+        }
     }
 
     private bool SampleObstacleIR(Transform sensorPoint)
@@ -404,7 +473,7 @@ public sealed class VirtualSensors : MonoBehaviour
             if (string.Equals(
                     current.tag,
                     targetBallTag,
-                    StringComparison.Ordinal))
+                    System.StringComparison.Ordinal))
             {
                 taggedBall = current;
                 return true;
@@ -523,5 +592,17 @@ public sealed class VirtualSensors : MonoBehaviour
         Gizmos.DrawLine(
             point.position,
             point.position + point.forward * distance);
+    }
+
+    private static float SampleGaussian(float mean, float stdDev)
+    {
+        if (stdDev <= 0.00001f)
+            return mean;
+
+        float u1 = Mathf.Clamp01(1f - Random.value);
+        float u2 = Random.value;
+        float randStdNormal = Mathf.Sqrt(-2f * Mathf.Log(u1)) *
+            Mathf.Sin(2f * Mathf.PI * u2);
+        return mean + stdDev * randStdNormal;
     }
 }
