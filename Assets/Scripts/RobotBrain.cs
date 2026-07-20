@@ -7,7 +7,7 @@ using UnityEngine;
 public class RobotBrain : Agent
 {
     private const int DriveContinuousActions = 3;
-    private const int MobileArmContinuousActions = 6;
+    private const int MobileArmContinuousActions = 5;
 
     [Header("Training mode")]
     [SerializeField] private RobotTrainingMode trainingMode = RobotTrainingMode.FixedArm;
@@ -31,7 +31,7 @@ public class RobotBrain : Agent
     [SerializeField] private float timePenalty = -0.001f;
     [SerializeField] private float ballInSightReward = 0.004f;
     [SerializeField] private float gripperIrReward = 0.01f;
-    [SerializeField] private float emptyGripperClosePenalty = -0.06f;
+    [SerializeField] private float emptyGripperClosePenalty = -0.15f;
     [SerializeField] private float armOcclusionPenalty = -0.008f;
     [SerializeField] private float holdStepReward = 0.02f;
     [SerializeField] private float holdSuccessReward = 3.0f;
@@ -52,6 +52,22 @@ public class RobotBrain : Agent
     [SerializeField] private float armEngageFarDistance = 1.8f;
     [Tooltip("Arm commands reach full strength inside this distance (metres).")]
     [SerializeField] private float armEngageNearDistance = 0.85f;
+
+    [Header("MobileArm pose penalties (ignored in FixedArm)")]
+    [Tooltip("Hard S1 ceiling while the agent controls the arm (degrees). Prevents sky poses.")]
+    [SerializeField] private float mobileTrainingS1Maximum = 0f;
+    [Tooltip("Penalty scale when S1 is raised above the floor-pickup shoulder angle.")]
+    [SerializeField] private float highArmPenalty = -0.02f;
+    [Tooltip("S1 degrees above floor-pickup before high-arm penalty starts.")]
+    [SerializeField] private float highArmS1SlackDegrees = 6f;
+    [Tooltip("Penalty when HoldPoint / claw faces upward (sky).")]
+    [SerializeField] private float skyClawPitchPenalty = -0.018f;
+    [Tooltip("HoldPoint.forward.y above this counts as pointing up.")]
+    [SerializeField, Range(0.05f, 0.9f)] private float skyClawPitchThreshold = 0.2f;
+    [Tooltip("Soft reward for staying near the floor-pickup S1/S2 while far from the ball.")]
+    [SerializeField] private float floorPoseBiasReward = 0.005f;
+    [SerializeField] private float highHoldPointPenalty = -0.015f;
+    [SerializeField] private float highHoldPointHeightMetres = 0.14f;
 
     [Header("Gripper Assistance")]
     [SerializeField] private bool autoCloseGripperOnBallDetect = true;
@@ -86,7 +102,6 @@ public class RobotBrain : Agent
     private float lastServoPanCommand;
     private float previousS1Angle;
     private float previousS2Angle;
-    private float previousS3Angle;
 
     public RobotTrainingMode TrainingMode => trainingMode;
     public int ExpectedContinuousActions =>
@@ -171,7 +186,6 @@ public class RobotBrain : Agent
 
         previousS1Angle = armRig.S1Angle;
         previousS2Angle = armRig.S2Angle;
-        previousS3Angle = armRig.S3Angle;
     }
 
     private void ResetArmPose()
@@ -397,7 +411,6 @@ public class RobotBrain : Agent
         float servoPanCmd;
         float s1Cmd;
         float s2Cmd;
-        float s3Cmd;
 
         if (ShouldApplyDomainRandomization() && currentActionLatency > 0)
         {
@@ -409,7 +422,6 @@ public class RobotBrain : Agent
             servoPanCmd = delayed[2];
             s1Cmd = delayed.Length > 3 ? delayed[3] : 0f;
             s2Cmd = delayed.Length > 4 ? delayed[4] : 0f;
-            s3Cmd = delayed.Length > 5 ? delayed[5] : 0f;
         }
         else
         {
@@ -418,7 +430,6 @@ public class RobotBrain : Agent
             servoPanCmd = actions.ContinuousActions[2];
             s1Cmd = actions.ContinuousActions.Length > 3 ? actions.ContinuousActions[3] : 0f;
             s2Cmd = actions.ContinuousActions.Length > 4 ? actions.ContinuousActions[4] : 0f;
-            s3Cmd = actions.ContinuousActions.Length > 5 ? actions.ContinuousActions[5] : 0f;
         }
 
         if (trackController != null)
@@ -428,9 +439,9 @@ public class RobotBrain : Agent
         lastServoPanCommand = servoPanCmd;
 
         ApplyCameraPan(servoPanCmd);
-        ApplyArmCommands(s1Cmd, s2Cmd, s3Cmd);
+        ApplyArmCommands(s1Cmd, s2Cmd);
         ExecuteGripperAction(actions.DiscreteActions[0]);
-        EvaluateRewards(moveCmd, turnCmd, servoPanCmd, s1Cmd, s2Cmd, s3Cmd);
+        EvaluateRewards(moveCmd, turnCmd, servoPanCmd, s1Cmd, s2Cmd);
     }
 
     private float[] BuildContinuousActionSnapshot(ActionBuffers actions)
@@ -474,7 +485,7 @@ public class RobotBrain : Agent
         sensorHeadRig.SetPan(newPan);
     }
 
-    private void ApplyArmCommands(float s1Cmd, float s2Cmd, float s3Cmd)
+    private void ApplyArmCommands(float s1Cmd, float s2Cmd)
     {
         if (armRig == null || trainingMode != RobotTrainingMode.MobileArm)
             return;
@@ -482,14 +493,18 @@ public class RobotBrain : Agent
         float engageGate = GetArmEngageGate();
         s1Cmd *= engageGate;
         s2Cmd *= engageGate;
-        s3Cmd *= engageGate;
 
         const float armDegreesPerSecond = 45f;
         float deltaTime = Time.fixedDeltaTime;
         float nextS1 = armRig.S1Angle + (s1Cmd * armDegreesPerSecond * deltaTime);
         float nextS2 = armRig.S2Angle + (s2Cmd * armDegreesPerSecond * deltaTime);
-        float nextS3 = armRig.S3Angle + (s3Cmd * armDegreesPerSecond * deltaTime);
-        armRig.SetServoCommands(nextS1, nextS2, nextS3, armRig.S4Closure);
+
+        // Hard ceiling so the policy cannot fold the claw into the sky.
+        float s1Ceiling = Mathf.Min(armRig.S1MaximumAngle, mobileTrainingS1Maximum);
+        nextS1 = Mathf.Clamp(nextS1, armRig.S1MinimumAngle, s1Ceiling);
+        nextS2 = Mathf.Clamp(nextS2, armRig.S2MinimumAngle, armRig.S2MaximumAngle);
+
+        armRig.SetArmPoseLockedWrist(nextS1, nextS2, armRig.S4Closure);
     }
 
     private float GetDistanceToBallMetres()
@@ -519,8 +534,7 @@ public class RobotBrain : Agent
         float turnCommand,
         float servoPanCommand,
         float s1Command,
-        float s2Command,
-        float s3Command)
+        float s2Command)
     {
         AddReward(timePenalty);
 
@@ -625,22 +639,7 @@ public class RobotBrain : Agent
 
         if (trainingMode == RobotTrainingMode.MobileArm && armRig != null)
         {
-            float armCommandMagnitude =
-                Mathf.Abs(s1Command) + Mathf.Abs(s2Command) + Mathf.Abs(s3Command);
-            float armJointDelta =
-                Mathf.Abs(armRig.S1Angle - previousS1Angle) +
-                Mathf.Abs(armRig.S2Angle - previousS2Angle) +
-                Mathf.Abs(armRig.S3Angle - previousS3Angle);
-
-            if (armEngageGate < 0.35f && armJointDelta > 0.01f)
-                AddReward(farArmMotionPenalty * armJointDelta);
-
-            if (armEngageGate > 0.55f && armCommandMagnitude > 0.05f)
-                AddReward(closeArmMotionReward * armEngageGate * armCommandMagnitude);
-
-            previousS1Angle = armRig.S1Angle;
-            previousS2Angle = armRig.S2Angle;
-            previousS3Angle = armRig.S3Angle;
+            EvaluateMobileArmPoseRewards(armEngageGate, s1Command, s2Command);
         }
 
         if (virtualSensors != null)
@@ -651,9 +650,6 @@ public class RobotBrain : Agent
             {
                 AddReward(-0.008f);
             }
-
-            if (virtualSensors.LeftIrOccludedByArm || virtualSensors.RightIrOccludedByArm)
-                AddReward(armOcclusionPenalty);
         }
 
         if (virtualSensors != null &&
@@ -663,6 +659,78 @@ public class RobotBrain : Agent
         {
             AddReward(gripperIrReward);
         }
+    }
+
+    /// <summary>
+    /// Pose shaping / penalties for the controllable arm. FixedArm skips this entirely.
+    /// </summary>
+    private void EvaluateMobileArmPoseRewards(
+        float armEngageGate,
+        float s1Command,
+        float s2Command)
+    {
+        float armCommandMagnitude = Mathf.Abs(s1Command) + Mathf.Abs(s2Command);
+        float armJointDelta =
+            Mathf.Abs(armRig.S1Angle - previousS1Angle) +
+            Mathf.Abs(armRig.S2Angle - previousS2Angle);
+
+        if (armEngageGate < 0.35f && armJointDelta > 0.01f)
+            AddReward(farArmMotionPenalty * armJointDelta);
+
+        if (armEngageGate > 0.55f && armCommandMagnitude > 0.05f)
+            AddReward(closeArmMotionReward * armEngageGate * armCommandMagnitude);
+
+        // Raised shoulder (claw toward sky / blocks sensors).
+        float s1AbovePickup = armRig.S1Angle - armRig.FloorPickupS1;
+        if (s1AbovePickup > highArmS1SlackDegrees)
+        {
+            float highFactor = Mathf.Clamp01(
+                (s1AbovePickup - highArmS1SlackDegrees) / 45f);
+            // Stronger while navigating / far from the ball.
+            float farBias = 1f - 0.55f * armEngageGate;
+            AddReward(highArmPenalty * highFactor * farBias);
+        }
+
+        // Soft preference for floor-ready S1/S2 while far from the ball.
+        if (armEngageGate < 0.4f)
+        {
+            float s1Error = Mathf.Abs(armRig.S1Angle - armRig.FloorPickupS1) / 55f;
+            float s2Error = Mathf.Abs(armRig.S2Angle - armRig.FloorPickupS2) / 75f;
+            float poseError = Mathf.Clamp01(0.65f * s1Error + 0.35f * s2Error);
+            AddReward(floorPoseBiasReward * (1f - poseError) * (1f - armEngageGate));
+        }
+
+        Transform hold = armRig.HoldPoint;
+        if (hold != null)
+        {
+            float pitchUp = hold.forward.y;
+            if (pitchUp > skyClawPitchThreshold)
+            {
+                float skyFactor = Mathf.Clamp01(
+                    (pitchUp - skyClawPitchThreshold) / (1f - skyClawPitchThreshold));
+                AddReward(skyClawPitchPenalty * skyFactor);
+            }
+
+            float holdHeight = hold.position.y;
+            if (holdHeight > highHoldPointHeightMetres)
+            {
+                float heightFactor = Mathf.Clamp01(
+                    (holdHeight - highHoldPointHeightMetres) / 0.25f);
+                AddReward(highHoldPointPenalty * heightFactor);
+            }
+        }
+
+        if (virtualSensors != null &&
+            (virtualSensors.LeftIrOccludedByArm || virtualSensors.RightIrOccludedByArm))
+        {
+            // Occlusion is worse when the arm is high / far from grasp.
+            float occlusionScale = 1f + Mathf.Clamp01(
+                (armRig.S1Angle - armRig.FloorPickupS1) / 40f);
+            AddReward(armOcclusionPenalty * occlusionScale);
+        }
+
+        previousS1Angle = armRig.S1Angle;
+        previousS2Angle = armRig.S2Angle;
     }
 
     private void ExecuteGripperAction(int command)

@@ -7,7 +7,7 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Configures two training scenes:
-/// P2 — mobile arm (6 continuous actions), P3 — fixed arm (3 continuous actions).
+/// P2 — mobile arm (5 continuous: drive/cam/S1/S2), P3 — fixed arm (3 continuous).
 /// Menu: GFS-X → Setup Training Scenes
 /// Batch: Unity -batchmode -quit -executeMethod SetupTrainingScenes.SetupBatch
 /// </summary>
@@ -42,7 +42,7 @@ public static class SetupTrainingScenes
 
     private static bool ConfigureAllScenes()
     {
-        if (!ConfigureScene(MobileScenePath, RobotTrainingMode.MobileArm, MobileBehaviorName, 6))
+        if (!ConfigureScene(MobileScenePath, RobotTrainingMode.MobileArm, MobileBehaviorName, 5))
             return false;
 
         if (!System.IO.File.Exists(FixedScenePath))

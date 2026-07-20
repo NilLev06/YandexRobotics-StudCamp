@@ -99,6 +99,15 @@ public sealed class GfsxArmRigController : MonoBehaviour
     [SerializeField] private float floorPickupS2 = 0f;
     [SerializeField] private float floorPickupS3 = 90f;
 
+    [Header("Floor clearance (no ground contact)")]
+    [Tooltip("Claw tip must stay strictly above the floor by this margin (metres). Near-zero, but non-contact.")]
+    [SerializeField, Min(0.0005f)] private float minTipClearanceMetres = 0.003f;
+    [Tooltip("How far above floor-pickup S1 the clearance fixer may raise the shoulder.")]
+    [SerializeField, Range(0f, 40f)] private float maxClearanceRaiseDegrees = 12f;
+    [SerializeField] private LayerMask floorRaycastLayers = ~0;
+
+    private readonly RaycastHit[] floorHitBuffer = new RaycastHit[16];
+
     public bool KeyboardControlEnabled
     {
         get => readKeyboard;
@@ -184,6 +193,14 @@ public sealed class GfsxArmRigController : MonoBehaviour
     public bool IsJawClosed => S4NormalizedClosure >= 0.5f;
     public Transform HoldPoint => holdPoint;
     public Transform GripperIrPoint => gripperIrPoint;
+    public float FloorPickupS1 => floorPickupS1;
+    public float FloorPickupS2 => floorPickupS2;
+    public float FloorPickupS3 => floorPickupS3;
+    public float MinTipClearanceMetres => minTipClearanceMetres;
+    public float ClawTipClearanceAboveFloor => GetClawClearanceAboveFloor();
+    /// <summary>Highest S1 the floor-clearance helper is allowed to command.</summary>
+    public float MaxS1ForFloorClearance =>
+        Mathf.Min(s1MaximumAngle, floorPickupS1 + maxClearanceRaiseDegrees);
 
     private void Update()
     {
@@ -198,6 +215,8 @@ public sealed class GfsxArmRigController : MonoBehaviour
         // Re-apply after every other component. This prevents individual arm
         // parts from being translated, scaled, or detached by runtime logic.
         ApplyPose();
+        if (Application.isPlaying)
+            EnforceFloorClearance();
     }
 
     private void OnValidate()
@@ -592,7 +611,7 @@ public sealed class GfsxArmRigController : MonoBehaviour
     }
 
     /// <summary>
-    /// Straight arm (S2=0). Only S1 shoulder sets height.
+    /// Straight arm (S2=0). Only S1 shoulder sets height. S3 locked to floor pose.
     /// </summary>
     public void SetFloorPickupPose()
     {
@@ -602,6 +621,142 @@ public sealed class GfsxArmRigController : MonoBehaviour
         s4Closure = s4MinimumClosureCommand;
         ClampCommands();
         ApplyPose();
+        EnforceFloorClearance();
+    }
+
+    /// <summary>
+    /// Sets S1/S2 while locking wrist roll to the floor-pickup S3 value.
+    /// </summary>
+    public void SetArmPoseLockedWrist(float requestedS1, float requestedS2, float requestedS4)
+    {
+        s1Angle = requestedS1;
+        s2Angle = requestedS2;
+        s3WristRollAngle = floorPickupS3;
+        s4Closure = requestedS4;
+        ClampCommands();
+        ApplyPose();
+        EnforceFloorClearance();
+    }
+
+    /// <summary>
+    /// Raises only S1 until the claw tip is strictly above the floor by
+    /// <see cref="minTipClearanceMetres"/>. Never raises past
+    /// <see cref="MaxS1ForFloorClearance"/> so a bad floor raycast cannot
+    /// fold the arm into the sky.
+    /// </summary>
+    public bool EnforceFloorClearance()
+    {
+        bool clamped = false;
+        float s1Ceiling = MaxS1ForFloorClearance;
+
+        for (int attempt = 0; attempt < 32; attempt++)
+        {
+            Physics.SyncTransforms();
+            if (GetClawClearanceAboveFloor() >= minTipClearanceMetres)
+                return clamped;
+
+            if (s1Angle >= s1Ceiling - 0.01f)
+                return clamped;
+
+            s1Angle = Mathf.Min(s1Angle + 1.0f, s1Ceiling);
+            ClampCommands();
+            ApplyPose();
+            clamped = true;
+        }
+
+        Physics.SyncTransforms();
+        return clamped;
+    }
+
+    public float GetClawClearanceAboveFloor()
+    {
+        return GetClawLowestWorldY() - GetFloorSurfaceY();
+    }
+
+    private float GetFloorSurfaceY()
+    {
+        Vector3 origin = holdPoint != null
+            ? holdPoint.position
+            : (s1ShoulderPivot != null ? s1ShoulderPivot.position : transform.position);
+        origin.y += 0.35f;
+
+        int hitCount = Physics.RaycastNonAlloc(
+            origin,
+            Vector3.down,
+            floorHitBuffer,
+            2.5f,
+            floorRaycastLayers,
+            QueryTriggerInteraction.Ignore);
+
+        float bestY = float.PositiveInfinity;
+        int count = Mathf.Min(hitCount, floorHitBuffer.Length);
+        for (int index = 0; index < count; index++)
+        {
+            RaycastHit hit = floorHitBuffer[index];
+            if (hit.collider == null)
+                continue;
+
+            // Ray often starts above the claw and would otherwise "see" the
+            // jaw as the floor, then keep raising S1 until the arm points up.
+            if (hit.collider.transform.IsChildOf(transform))
+                continue;
+
+            bestY = Mathf.Min(bestY, hit.point.y);
+        }
+
+        return float.IsPositiveInfinity(bestY) ? 0f : bestY;
+    }
+
+    private float GetClawLowestWorldY()
+    {
+        float lowest = float.PositiveInfinity;
+        AccumulateSubtreeLowestWorldY(s3WristRollPivot, ref lowest);
+        AccumulateSubtreeLowestWorldY(upperJawPivot, ref lowest);
+        AccumulateSubtreeLowestWorldY(lowerJawPivot, ref lowest);
+        AccumulateLowestWorldY(holdPoint, ref lowest);
+        AccumulateLowestWorldY(gripperIrPoint, ref lowest);
+        return float.IsPositiveInfinity(lowest) ? transform.position.y : lowest;
+    }
+
+    private static void AccumulateSubtreeLowestWorldY(Transform root, ref float lowest)
+    {
+        if (root == null)
+            return;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        for (int index = 0; index < renderers.Length; index++)
+        {
+            if (renderers[index] != null)
+                lowest = Mathf.Min(lowest, renderers[index].bounds.min.y);
+        }
+
+        Collider[] colliders = root.GetComponentsInChildren<Collider>(true);
+        for (int index = 0; index < colliders.Length; index++)
+        {
+            Collider collider = colliders[index];
+            if (collider != null && collider.enabled)
+                lowest = Mathf.Min(lowest, collider.bounds.min.y);
+        }
+
+        if (renderers.Length == 0 && colliders.Length == 0)
+            lowest = Mathf.Min(lowest, root.position.y);
+    }
+
+    private static void AccumulateLowestWorldY(Transform part, ref float lowest)
+    {
+        if (part == null)
+            return;
+
+        Renderer renderer = part.GetComponent<Renderer>();
+        if (renderer != null)
+            lowest = Mathf.Min(lowest, renderer.bounds.min.y);
+
+        Collider collider = part.GetComponent<Collider>();
+        if (collider != null && collider.enabled)
+            lowest = Mathf.Min(lowest, collider.bounds.min.y);
+
+        if (renderer == null && collider == null)
+            lowest = Mathf.Min(lowest, part.position.y);
     }
 
     [ContextMenu("Reset Servo Axes To Neutral")]
