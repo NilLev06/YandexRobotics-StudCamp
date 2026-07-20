@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Live map: renders the SLAM occupancy grid as a base image and serves the
 other layers as vector JSON (robot pose, driven trail, confirmed objects,
-raw camera sightings) so the browser draws/toggles them independently on top
-of the same base map. Read-only: this node never commands motion.
+raw camera sightings, raw lidar points) so the browser draws/toggles them
+independently on top of the same base map. Read-only: this node never
+commands motion.
 
 Layer honesty, by data source:
   occupancy  - lidar-built SLAM grid. Centimeter accurate.
+  points     - raw /scan returns transformed into the map frame and
+               accumulated over time, strictly 2D (single lidar plane, no
+               height). Same sensor and accuracy as occupancy, just denser
+               and un-rasterized -- shows exactly where the beam has
+               actually touched something instead of a quantized cell.
   trail      - odometry/tf breadcrumb of where the rover has driven. Accurate.
   found      - lidar+camera fused, only published once object_search.py has
                a validated calibration and lidar-associates a target.
@@ -38,8 +44,9 @@ import rclpy
 from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.duration import Duration
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, LaserScan
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -49,10 +56,13 @@ MAX_FOUND = 300
 MAX_SIGHTED = 300
 MAX_TRAIL = 2000
 MAX_PHOTOS = 80
+MAX_POINTS = 8000
 FOUND_STALE_S = 3600.0
 SIGHTED_STALE_S = 1800.0
 TRAIL_MIN_STEP_M = 0.15
 TRAIL_MIN_INTERVAL_S = 1.0
+POINTS_MIN_INTERVAL_S = 0.5
+POINTS_STRIDE = 2  # keep every Nth valid return per scan to bound density
 
 PAGE = """<!doctype html>
 <html lang="ru">
@@ -89,6 +99,7 @@ PAGE = """<!doctype html>
 <body>
 <header>
   <h1>RoboMarvel &middot; карта</h1>
+  <label><input type="checkbox" id="layer-points"><span class="dot" style="background:#7cc7ff"></span>облако точек (лидар)</label>
   <label><input type="checkbox" id="layer-trail" checked><span class="ray" style="background:#7f77dd"></span>след</label>
   <label><input type="checkbox" id="layer-found" checked><span class="dot" style="background:#f6b73c"></span>подтверждённые объекты</label>
   <label><input type="checkbox" id="layer-sighted" checked><span class="ray" style="background:#5dcaa5"></span>замечено камерой (приблизительно)</label>
@@ -97,6 +108,7 @@ PAGE = """<!doctype html>
 <div class="presets">
   <button type="button" data-preset="all">Всё</button>
   <button type="button" data-preset="occupancy">Только карта</button>
+  <button type="button" data-preset="points">Только облако точек</button>
   <button type="button" data-preset="trail">Только след</button>
   <button type="button" data-preset="objects">Только объекты</button>
 </div>
@@ -116,11 +128,12 @@ PAGE = """<!doctype html>
   const canvas = document.getElementById('overlay');
   const ctx = canvas.getContext('2d');
   const status = document.getElementById('status');
+  const cbPoints = document.getElementById('layer-points');
   const cbTrail = document.getElementById('layer-trail');
   const cbFound = document.getElementById('layer-found');
   const cbSighted = document.getElementById('layer-sighted');
   const cbCamera = document.getElementById('layer-camera');
-  const allLayers = [cbTrail, cbFound, cbSighted, cbCamera];
+  const allLayers = [cbPoints, cbTrail, cbFound, cbSighted, cbCamera];
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightbox-img');
 
@@ -150,11 +163,13 @@ PAGE = """<!doctype html>
     if (nearest) openLightbox(nearest.photoId);
   });
 
+  // Order matches allLayers: [points, trail, found, sighted, camera]
   const PRESETS = {
-    all: [true, true, true, true],
-    occupancy: [false, false, false, false],
-    trail: [true, false, false, false],
-    objects: [false, true, true, false],
+    all: [true, true, true, true, true],
+    occupancy: [false, false, false, false, false],
+    points: [true, false, false, false, false],
+    trail: [false, true, false, false, false],
+    objects: [false, false, true, true, false],
   };
   document.querySelectorAll('.presets button').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -187,7 +202,7 @@ PAGE = """<!doctype html>
       const parts = [];
       parts.push(layers.map_received ? `карта ${layers.width}x${layers.height}, ${layers.resolution_m}м/клетка` : 'карта ещё не построена');
       parts.push(layers.robot_pose ? 'позиция ровера известна' : 'позиция ровера неизвестна');
-      parts.push(`след: ${layers.trail.length} точек, объектов: ${layers.found.length}, замечено: ${layers.sighted.length}`);
+      parts.push(`облако точек: ${layers.points.length}, след: ${layers.trail.length} точек, объектов: ${layers.found.length}, замечено: ${layers.sighted.length}`);
       parts.push('обзор камеры нарисован по допущению "смотрит вперёд" — реальный угол крепления не откалиброван');
       status.textContent = parts.join(' · ');
       base.src = '/map.jpg?t=' + Date.now();
@@ -204,6 +219,14 @@ PAGE = """<!doctype html>
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       clickablePoints = [];
+
+      if (cbPoints.checked && layers.points.length) {
+        ctx.fillStyle = 'rgba(124, 199, 255, 0.65)';
+        for (const p of layers.points) {
+          const [px, py] = toPx(p[0], p[1]);
+          ctx.fillRect(px - 0.5, py - 0.5, 1.5, 1.5);
+        }
+      }
 
       if (cbTrail.checked && layers.trail.length > 1) {
         ctx.strokeStyle = '#7f77dd';
@@ -355,12 +378,17 @@ class SharedState:
     trail: list[tuple[float, float]] = field(default_factory=list)
     found: list[FoundMarker] = field(default_factory=list)
     sighted: list[SightedRay] = field(default_factory=list)
+    # Raw /scan returns transformed into the map frame and accumulated over
+    # time, strictly 2D (single lidar plane). Bounded FIFO -- same sensor
+    # and accuracy as the occupancy grid, just denser and un-rasterized.
+    points: list[tuple[float, float]] = field(default_factory=list)
     # Real camera frames pinned to found/sighted markers, keyed by the same
     # photo_id embedded in their /search/found or /search/sighted payload.
     # Bounded FIFO cache -- this is diagnostic content, not measurement data.
     photos: "OrderedDict[str, bytes]" = field(default_factory=OrderedDict)
     latest_jpeg: bytes | None = None
     last_trail_at: float = 0.0
+    last_points_at: float = 0.0
 
 
 def render_base_map(state: SharedState) -> bytes | None:
@@ -399,7 +427,9 @@ def render_base_map(state: SharedState) -> bytes | None:
 
 
 class MapViewNode(Node):
-    def __init__(self, state: SharedState, map_frame: str, base_frame: str) -> None:
+    def __init__(
+        self, state: SharedState, map_frame: str, base_frame: str, scan_topic: str
+    ) -> None:
         super().__init__("z_boys_map_view")
         self.state = state
         self.map_frame = map_frame
@@ -410,11 +440,58 @@ class MapViewNode(Node):
         self.create_subscription(String, "/search/found", self._on_found, 20)
         self.create_subscription(String, "/search/sighted", self._on_sighted, 20)
         self.create_subscription(CompressedImage, "/search/photo", self._on_photo, 10)
+        self.create_subscription(
+            LaserScan, scan_topic, self._on_scan, qos_profile_sensor_data
+        )
         self.create_timer(0.5, self._update_pose)
 
     def _on_map(self, msg: OccupancyGrid) -> None:
         with self.state.lock:
             self.state.grid = msg
+
+    def _on_scan(self, msg: LaserScan) -> None:
+        now = time.monotonic()
+        with self.state.lock:
+            if now - self.state.last_points_at < POINTS_MIN_INTERVAL_S:
+                return
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                self.map_frame, msg.header.frame_id, Time(),
+                timeout=Duration(seconds=0.1),
+            )
+        except TransformException:
+            return  # map->scan TF not ready yet; skip this scan, try the next
+        tx = transform.transform.translation
+        rotation = transform.transform.rotation
+        # Same quaternion-yaw shortcut as _update_pose: the lidar mount is
+        # flat, so only the Z rotation of map<-scan_frame matters for a
+        # strictly-2D point cloud.
+        yaw = math.atan2(
+            2.0 * (rotation.w * rotation.z + rotation.x * rotation.y),
+            1.0 - 2.0 * (rotation.y * rotation.y + rotation.z * rotation.z),
+        )
+        cos_yaw, sin_yaw = math.cos(yaw), math.sin(yaw)
+
+        new_points: list[tuple[float, float]] = []
+        for index in range(0, len(msg.ranges), POINTS_STRIDE):
+            r = msg.ranges[index]
+            if not math.isfinite(r) or r < max(msg.range_min, 0.02) or r > msg.range_max:
+                continue
+            angle = msg.angle_min + index * msg.angle_increment
+            local_x = r * math.cos(angle)
+            local_y = r * math.sin(angle)
+            new_points.append((
+                tx.x + local_x * cos_yaw - local_y * sin_yaw,
+                tx.y + local_x * sin_yaw + local_y * cos_yaw,
+            ))
+        if not new_points:
+            return
+
+        with self.state.lock:
+            self.state.last_points_at = now
+            self.state.points.extend(new_points)
+            if len(self.state.points) > MAX_POINTS:
+                self.state.points = self.state.points[-MAX_POINTS:]
 
     def _on_photo(self, msg: CompressedImage) -> None:
         photo_id = msg.header.frame_id
@@ -559,6 +636,7 @@ class MapHandler(BaseHTTPRequestHandler):
             trail = list(self.state.trail)
             found = list(self.state.found)
             sighted = list(self.state.sighted)
+            points = list(self.state.points)
 
         payload = {
             "map_received": grid is not None,
@@ -577,6 +655,7 @@ class MapHandler(BaseHTTPRequestHandler):
                 if home_pose else None
             ),
             "trail": [[round(x, 3), round(y, 3)] for x, y in trail],
+            "points": [[round(x, 3), round(y, 3)] for x, y in points],
             "found": [
                 {"class": m.label, "x": round(m.x, 3), "y": round(m.y, 3), "at": m.at,
                  "photo_id": m.photo_id}
@@ -605,6 +684,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=int(os.getenv("MAP_VIEW_PORT", "8093")))
     parser.add_argument("--map-frame", default=os.getenv("MAP_VIEW_MAP_FRAME", "map"))
     parser.add_argument("--base-frame", default=os.getenv("MAP_VIEW_BASE_FRAME", "base_link"))
+    parser.add_argument("--scan-topic", default=os.getenv("MAP_VIEW_SCAN_TOPIC", "/scan"))
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -614,7 +694,7 @@ def main() -> int:
     stop_event = threading.Event()
 
     rclpy.init(args=None)
-    node = MapViewNode(state, args.map_frame, args.base_frame)
+    node = MapViewNode(state, args.map_frame, args.base_frame, args.scan_topic)
     ros_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True, name="ros-spin")
     ros_thread.start()
 
