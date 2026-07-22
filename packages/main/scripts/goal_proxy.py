@@ -9,7 +9,7 @@ from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String, Float32MultiArray
 # from std_srvs.srv import Empty
-from slam_toolbox.srv import Reset
+from std_srvs.srv import Trigger
 
 
 class GoalProxy(Node):
@@ -45,7 +45,7 @@ class GoalProxy(Node):
 
         # Service to cancel the current goal
         self.cancel_srv = self.create_service(
-            Reset,
+            Trigger,
             "/goal/cancel",
             self.cancel_callback,
             callback_group=MutuallyExclusiveCallbackGroup()
@@ -121,21 +121,15 @@ class GoalProxy(Node):
         # self.publish_status("Goal accepted")
         self.current_goal_handle = goal_handle
 
-        # Wait for the final result. Bind this goal_handle into the callback so a
-        # late result for a since-superseded goal cannot clobber a newer handle.
+        # Wait for the final result
         self.result_future = goal_handle.get_result_async()
-        self.result_future.add_done_callback(
-            lambda future, handle=goal_handle: self.result_callback(future, handle)
-        )
+        self.result_future.add_done_callback(self.result_callback)
 
-    def result_callback(self, future, handle):
+    def result_callback(self, future):
         """Callback when the action finishes (success, aborted, cancelled)."""
         result = future.result()
         status = result.status
-        # Only clear the active handle if it still belongs to this goal; a
-        # canceled goal's result can arrive after a newer goal was accepted.
-        if self.current_goal_handle is handle:
-            self.current_goal_handle = None
+        self.current_goal_handle = None
 
         # Publish final status
         if status == 4:          # GoalStatus.STATUS_SUCCEEDED
@@ -186,6 +180,8 @@ class GoalProxy(Node):
             cancel_future.add_done_callback(self.cancel_done_callback)
         else:
             self.get_logger().info("Cancel service called but no active goal")
+        response.success = True
+        response.message = "Cancellation requested"
         return response
 
 

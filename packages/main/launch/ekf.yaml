@@ -1,0 +1,58 @@
+launch:
+- node:
+    pkg: "robot_localization"
+    exec: "ekf_node"
+    name: "ekf_node"
+    namespace: "ekf"
+    output: "log"
+    param:
+    - { name: "use_sim_time", value: false }
+    # - { name: "qos", value: 0 }
+    - { name: "use_control", value: False }
+    - { name: "frequency", value: 30.0 }
+    - { name: "sensor_timeout", value: 0.3 }
+    - { name: "two_d_mode", value: true }
+    - { name: "world_frame", value: "odom" }
+    - { name: "odom_frame", value: "odom" }
+    - { name: "base_link_frame", value: "base_link" }
+    - { name: "publish_tf", value: True }
+    - { name: "publish_acceleration", value: False }
+    - { name: "predict_to_current_time", value: True }
+    - { name: "print_diagnostics", value: True }
+    # - { name: "dynamic_process_noise_covariance", value: True }
+
+    - { name: "imu0", value: "/hardware/imu" }
+    - { name: "imu0_queue_size", value: 30 }
+    - { name: "imu0_remove_gravitational_acceleration", value: False }
+    - { name: "imu0_config", value: [
+            False, False, False, # pos
+            False, False, False, # rot
+            False, False, False, # pos`
+            False, False, True,  # rot`
+            False, False, False  # pos``
+        ]
+    }
+
+    - { name: "odom0", value: "/hardware/odom" }
+    - { name: "odom0_differential", value: False }
+    - { name: "odom0_queue_size", value: 30 }
+    - { name: "odom0_config", value: [
+            False,  False,  False,   # pos
+            False, False, False,    # rot
+            True, False, False,    # pos`
+            False, False, True,    # rot`
+            False, False, False,   # pos``
+        ]
+    }
+
+    - { name: "odom1", value: "/icp/odom" }
+    - { name: "odom1_differential", value: False }
+    - { name: "odom1_queue_size", value: 30 }
+    - { name: "odom1_config", value: [
+            False,  False,  False,   # pos
+            False, False, False,    # rot
+            True, True, False,    # pos`
+            False, False, True,    # rot`
+            False, False, False,   # pos``
+        ]
+    }

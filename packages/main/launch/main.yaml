@@ -2,6 +2,21 @@ launch:
   - node:
       pkg: hwnode
       exec: hwnode
+  - node:
+      pkg: voice
+      exec: tts_node
+      name: tts
+      output: screen
+  - node:
+      pkg: main
+      exec: battery_guard.py
+      name: battery_guard
+      output: screen
+  - node:
+      pkg: main
+      exec: object_search_manager.py
+      name: object_search_manager
+      output: screen
   - include:
       file: $(find-pkg-share main)/launch/bridge.yaml
   - include:
@@ -10,11 +25,26 @@ launch:
       file: $(find-pkg-share main)/launch/lidar.yaml
   - include:
       file: $(find-pkg-share main)/launch/icp.yaml
+  - node:
+      pkg: main
+      exec: odom_sanitizer.py
+      name: odom_sanitizer
+      output: screen
   - include:
       file: $(find-pkg-share main)/launch/nav2.yaml
   - include:
       file: $(find-pkg-share main)/launch/goal_proxy.yaml
   - include:
-      file: $(find-pkg-share main)/launch/slam.yaml
+      file: $(find-pkg-share main)/launch/adaptive_mapping.launch.py
+  - node:
+      pkg: main
+      exec: maze_explorer.py
+      name: maze_explorer
+      output: screen
+      param:
+      - { name: scan_timeout_sec, value: 16.0 }
   - include:
       file: $(find-pkg-share main)/launch/camera_stream.yaml
+#   - node:
+#       pkg: detection
+#       exec: detection
