@@ -18,13 +18,36 @@ cd /home/robomarvel/z_boys
 docker compose -f docker-compose.yolo-live.yaml up -d
 ```
 
+Port 8091 is already reserved (mapped but unused) by the main `ros` container's
+`docker-compose.yaml`, so this sidecar binds 8092 instead. Change
+`HTTP_PORT`/`YOLO_LIVE_BIND_HOST` in `docker-compose.yolo-live.yaml` and the
+port in the URLs below if 8092 is also taken on your rover.
+
 Open:
 
-- Annotated viewer: `http://192.168.2.44:8091/`
-- MJPEG only: `http://192.168.2.44:8091/stream.mjpg`
-- One JPEG: `http://192.168.2.44:8091/snapshot.jpg`
-- Health/metrics: `http://192.168.2.44:8091/health`
+- Annotated viewer: `http://192.168.2.44:8092/`
+- MJPEG only: `http://192.168.2.44:8092/stream.mjpg`
+- One JPEG: `http://192.168.2.44:8092/snapshot.jpg`
+- Health/metrics: `http://192.168.2.44:8092/health`
 - Original WebRTC feed: `http://192.168.2.44:8889/cam/`
+
+By default this runs the `rover_m2m/models/yolo11n-ball-cube-int8.onnx`
+model (ball/cube/robot-claw, `imgsz=512`) instead of the stock COCO
+`yolo11n`, via the `YOLO_MODEL`/`YOLO_IMAGE_SIZE` env vars and a read-only
+mount of `rover_m2m/models`. To go back to the stock model, set `YOLO_MODEL`
+to `/root/weights/yolo11n_ncnn_model` and drop `YOLO_IMAGE_SIZE` (defaults to
+640).
+
+**This image does not ship `onnx`/`onnxruntime`, and the container runs
+`read_only: true` so Ultralytics' auto-install on first inference fails
+silently (or worse, fails loud with `No space left on device` if `/tmp` is
+too small).** Vendor both packages from a container that already has them
+(e.g. `ros`, after `pip install onnx onnxruntime` there) into
+`z_boys/vendor-python/`, mount it read-only at `/root/vendor-python`, and add
+that path to `PYTHONPATH` — see `docker-compose.yolo-live.yaml` for the
+working setup. This vendoring does not survive an image rebuild; if
+`registry.robotics-lab.ru/robomarvel:v6` gets rebuilt, redo the `pip install`
++ `docker cp` steps.
 
 ## Foxglove
 
