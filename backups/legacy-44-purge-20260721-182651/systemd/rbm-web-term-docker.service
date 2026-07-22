@@ -1,0 +1,14 @@
+[Unit]
+Description=RBM Web Terminal (docker)
+After=network.target
+
+[Service]
+Type=simple
+User=keyboard
+WorkingDirectory=/home/keyboard
+ExecStart=/home/keyboard/.setup/ttyd -W -p 8200 docker exec -it ros tmux new -A -s main bash
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

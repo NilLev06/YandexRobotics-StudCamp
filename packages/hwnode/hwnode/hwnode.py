@@ -3,7 +3,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from serial import Serial
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Float32MultiArray, Float32
+from std_msgs.msg import Bool, Float32MultiArray, Float32
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu
 from threading import Thread
 from hwnode.crc8 import crc8
@@ -26,7 +27,7 @@ CONTROL_HZ = 30
 ANGULAR_GAIN = 1.8
 LINEAR_GAIN = 2.0
 
-MIN_INPLACE_ANGULAR = 0.3
+MIN_INPLACE_ANGULAR = 0.35
 INPLACE_ANGULAR_THRESHOLD = 0.1
 INPLACE_LINEAR_THRESHOLD = 0.05
 
@@ -108,6 +109,24 @@ class HardwareNode(Node):
         self.v_left = 0.0
         self.v_right = 0.0
         self.battery_v = None
+        self.low_battery = False
+        self.low_battery_count = 0
+        self.battery_recovery_count = 0
+
+        # On this rover the STM still reports telemetry at 7.1 V while the
+        # motor driver no longer produces wheel motion. Stop above that
+        # observed motor-side cutoff and require clear hysteresis to recover.
+        self.declare_parameter("low_battery_voltage", 7.2)
+        self.declare_parameter("low_battery_recovery_voltage", 7.4)
+        self.declare_parameter("low_battery_debounce_sec", 0.7)
+        self.low_battery_voltage = float(
+            self.get_parameter("low_battery_voltage").value
+        )
+        self.low_battery_recovery_voltage = float(
+            self.get_parameter("low_battery_recovery_voltage").value
+        )
+        debounce = float(self.get_parameter("low_battery_debounce_sec").value)
+        self.low_battery_samples = max(1, round(debounce * CONTROL_HZ))
 
         self.last_packet: Packet = None
         self.last_cmd_time = self.get_clock().now()
@@ -120,34 +139,33 @@ class HardwareNode(Node):
         self.status_pub = self.create_publisher(Float32MultiArray, "/hardware/status", 1)
         self.odom_pub = self.create_publisher(Odometry, "/hardware/odom", 1)
         self.battery_pub = self.create_publisher(Float32, "/hardware/battery", 1)
+        self.battery_raw_pub = self.create_publisher(
+            Float32, "/hardware/battery_raw", 1
+        )
+        safety_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.low_battery_pub = self.create_publisher(
+            Bool, "/hardware/low_battery", safety_qos
+        )
+        self.low_battery_pub.publish(Bool(data=False))
+        self.create_timer(1.0, self.publish_battery_safety_state)
 
         self.read_thread = Thread(target=self.read_loop, daemon=True)
         self.read_thread.start()
 
     def read_loop(self):
         buff = b""
-        crc_failures = 0
 
         while rclpy.ok():
             chunk = self.ser.read_until(b"\x7E")
+            if len(buff) + len(chunk) > Packet._size: buff = b""
             buff += chunk
-            if len(buff) > Packet._size:
-                # Resync on the last frame delimiter seen so far, discarding
-                # anything before it instead of just clearing on overflow.
-                last_delim = buff.rfind(b"\x7E", 0, len(buff) - 1)
-                buff = buff[last_delim:] if last_delim >= 0 else b""
-            if len(buff) != Packet._size:
-                continue
+            # chunk = chunk.rstrip(b"\x7E")
             packet = Packet.unpack(buff)
-            buff = b""
-            if packet is None:
-                crc_failures += 1
-                if crc_failures % 50 == 1:
-                    self.get_logger().warning(
-                        f"discarded {crc_failures} malformed/CRC-invalid serial packets"
-                    )
-                continue
-            crc_failures = 0
+            if packet is None: continue
             self.last_packet = packet
 
             now = self.get_clock().now().to_msg()
@@ -164,6 +182,8 @@ class HardwareNode(Node):
             self.status_pub.publish(status)
 
             batt = Float32()
+            self.battery_raw_pub.publish(Float32(data=packet.voltage))
+            self.update_battery_safety(packet.voltage)
             if self.battery_v is None:
                 self.battery_v = packet.voltage
             else:
@@ -175,14 +195,6 @@ class HardwareNode(Node):
             imu.header.frame_id = "base_link"
             imu.header.stamp = now
             imu.orientation_covariance = [-1.0] + [0.0] * 8
-            # Raw accelerometer counts, published for logging/telemetry only.
-            # Unlike gyro_x/y/z these have no known scale factor yet, so they
-            # are NOT m/s^2 -- covariance[0] = -1 keeps every consumer
-            # (EKF included) from treating them as a real measurement until
-            # someone determines the actual sensitivity and calibrates them.
-            imu.linear_acceleration.x = packet.accel_x
-            imu.linear_acceleration.y = packet.accel_y
-            imu.linear_acceleration.z = packet.accel_z
             imu.linear_acceleration_covariance = [-1.0] + [0.0] * 8
             imu.angular_velocity.x = packet.gyro_x
             imu.angular_velocity.y = packet.gyro_y
@@ -207,6 +219,36 @@ class HardwareNode(Node):
                 odom.twist.covariance[35] = 0.000001
             self.odom_pub.publish(odom)
 
+    def update_battery_safety(self, voltage: float):
+        """Debounce raw voltage and publish a latched low-battery signal."""
+        if voltage <= self.low_battery_voltage:
+            self.low_battery_count += 1
+            self.battery_recovery_count = 0
+        elif voltage >= self.low_battery_recovery_voltage:
+            self.battery_recovery_count += 1
+            self.low_battery_count = 0
+        else:
+            self.low_battery_count = 0
+            self.battery_recovery_count = 0
+
+        if not self.low_battery and self.low_battery_count >= self.low_battery_samples:
+            self.low_battery = True
+            self.get_logger().error(
+                f"LOW BATTERY: {voltage:.2f} V <= {self.low_battery_voltage:.2f} V"
+            )
+            self.low_battery_pub.publish(Bool(data=True))
+        elif self.low_battery and self.battery_recovery_count >= self.low_battery_samples:
+            self.low_battery = False
+            self.get_logger().warning(
+                f"Battery recovered: {voltage:.2f} V >= "
+                f"{self.low_battery_recovery_voltage:.2f} V"
+            )
+            self.low_battery_pub.publish(Bool(data=False))
+
+    def publish_battery_safety_state(self):
+        """Periodic state makes the safety signal observable across DDS restarts."""
+        self.low_battery_pub.publish(Bool(data=self.low_battery))
+
     def cmd_callback(self, msg: Twist):
         self.last_cmd_time = self.get_clock().now()
         v = msg.linear.x * LINEAR_GAIN
@@ -221,6 +263,7 @@ class HardwareNode(Node):
             w = 0.0
 
         self.target_v, self.target_w = v, w
+        print(self.target_v, self.target_w)
 
     def ramp(self, current, target, accel_step, decel_step):
         step = accel_step if abs(target) > abs(current) else decel_step
@@ -271,11 +314,6 @@ def main():
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    finally:
-        node.ser.close()
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
 
 
 if __name__ == "__main__":

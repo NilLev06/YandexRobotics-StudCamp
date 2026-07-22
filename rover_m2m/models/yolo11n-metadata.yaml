@@ -1,0 +1,26 @@
+description: Ultralytics YOLO11n model trained on /content/ball-claw-cube-detect-1/data.yaml
+author: Ultralytics
+date: '2026-07-09T19:13:32.422590'
+version: 8.4.90
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+head: Detect
+batch: 1
+imgsz:
+- 512
+- 512
+names:
+  0: ball
+  1: cube
+  2: robot-claw
+args:
+  data: null
+  batch: 1
+  fraction: 1.0
+  quantize: null
+  dynamic: false
+  nms: false
+channels: 3
+end2end: false

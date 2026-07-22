@@ -1,3 +1,8 @@
+import sys
+import time
+
+sys.path.insert(0, '/root/venv/lib/python3.12/site-packages')
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
@@ -14,6 +19,7 @@ class STTNode(Node):
 
         # Параметры
         self.declare_parameter('iam_token', '')
+        self.declare_parameter('api_key_file', '/src/rover_m2m/rover-m2m.env')
         self.declare_parameter('folder_id', '')
         self.declare_parameter('language', 'ru-RU')
         self.declare_parameter('sample_rate', 8000)
@@ -21,12 +27,10 @@ class STTNode(Node):
         # Получение параметров
         self.iam_token = self.get_parameter('iam_token').value
         self.folder_id = self.get_parameter('folder_id').value
+        self.api_key = self.read_api_key(self.get_parameter('api_key_file').value)
 
-        self.audio = None
-        self.recording = False
-
-        if not self.iam_token:
-            self.get_logger().error('IAM token not provided!')
+        if not self.iam_token and not self.api_key:
+            self.get_logger().error('Neither IAM token nor API key provided!')
             return
 
         # Publisher для распознанного текста
@@ -50,13 +54,24 @@ class STTNode(Node):
 
         # Запуск потоков
         self.recording = True
-        self.record_thread = threading.Thread(target=self.record_audio)
-        self.recognize_thread = threading.Thread(target=self.recognize_stream)
+        self.record_thread = threading.Thread(target=self.record_audio, daemon=True)
+        self.recognize_thread = threading.Thread(target=self.recognize_stream, daemon=True)
 
         self.record_thread.start()
         self.recognize_thread.start()
 
         self.get_logger().info('STT Node started (API v3)')
+
+    @staticmethod
+    def read_api_key(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as config:
+                for line in config:
+                    if line.startswith('YANDEX_API_KEY='):
+                        return line.split('=', 1)[1].strip().strip('"\'')
+        except OSError:
+            pass
+        return ''
 
     def record_audio(self):
         """Запись аудио с микрофона"""
@@ -127,44 +142,39 @@ class STTNode(Node):
         stub = stt_service_pb2_grpc.RecognizerStub(channel)
 
         # Подготовка метаданных для авторизации
-        metadata_list = [
-            ('authorization', f'Bearer {self.iam_token}'),
-        ]
+        if self.api_key:
+            metadata_list = [('authorization', f'Api-Key {self.api_key}')]
+        else:
+            metadata_list = [('authorization', f'Bearer {self.iam_token}')]
 
         # Добавляем folder_id если он указан
-        if self.folder_id:
+        if self.folder_id and not self.api_key:
             metadata_list.append(('x-folder-id', self.folder_id))
 
-        # Streaming распознавание
-        try:
-            it = stub.RecognizeStreaming(
-                self.audio_generator(),
-                metadata=tuple(metadata_list)
-            )
-
-            for response in it:
-                event_type = response.WhichOneof('Event')
-
-                # Обрабатываем только финальные результаты
-                if event_type == 'final' and len(response.final.alternatives) > 0:
-                    text = response.final.alternatives[0].text
-                    if text:
-                        self.get_logger().info(f'Recognized: {text}')
-
-                        # Публикация
-                        msg = String()
-                        msg.data = text
-                        self.text_pub.publish(msg)
-
-                # Промежуточные результаты (для отладки)
-                elif event_type == 'partial' and len(response.partial.alternatives) > 0:
-                    text = response.partial.alternatives[0].text
-                    self.get_logger().debug(f'Partial: {text}')
-
-        except grpc._channel._Rendezvous as err:
-            self.get_logger().error(f'Recognition error: {err._state.code} - {err._state.details}')
-        except Exception as e:
-            self.get_logger().error(f'Unexpected error: {e}')
+        # SpeechKit closes long streaming sessions. Reconnect while the node is alive.
+        while self.recording and rclpy.ok():
+            try:
+                responses = stub.RecognizeStreaming(
+                    self.audio_generator(), metadata=tuple(metadata_list)
+                )
+                for response in responses:
+                    event_type = response.WhichOneof('Event')
+                    if event_type == 'final' and response.final.alternatives:
+                        text = response.final.alternatives[0].text
+                        if text:
+                            self.get_logger().info(f'Recognized: {text}')
+                            self.text_pub.publish(String(data=text))
+                    elif event_type == 'partial' and response.partial.alternatives:
+                        text = response.partial.alternatives[0].text
+                        self.get_logger().debug(f'Partial: {text}')
+            except grpc.RpcError as err:
+                self.get_logger().error(
+                    f'Recognition error: {err.code()} - {err.details()}'
+                )
+            except Exception as e:
+                self.get_logger().error(f'Unexpected error: {e}')
+            if self.recording:
+                time.sleep(2.0)
 
     def destroy_node(self):
         """Корректное завершение"""
@@ -173,8 +183,7 @@ class STTNode(Node):
             self.record_thread.join(timeout=2.0)
         if hasattr(self, 'recognize_thread'):
             self.recognize_thread.join(timeout=2.0)
-        if self.audio is not None:
-            self.audio.terminate()
+        self.audio.terminate()
         super().destroy_node()
 
 def main(args=None):

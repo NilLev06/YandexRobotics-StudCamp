@@ -6,4 +6,8 @@ install/
 core.*
 .ipynb_checkpoints
 .autostart
-.DS_Store
+log/
+maps/*.pbstream
+maps/*.pgm
+maps/*.yaml
+rover_m2m/yandex-cloud.env

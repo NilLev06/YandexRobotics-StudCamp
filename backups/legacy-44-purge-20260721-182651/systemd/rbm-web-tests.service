@@ -1,0 +1,14 @@
+[Unit]
+Description=RBM Web Tests
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/keyboard/.setup
+ExecStart=/home/keyboard/.setup/venv/bin/python /home/keyboard/.setup/test.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

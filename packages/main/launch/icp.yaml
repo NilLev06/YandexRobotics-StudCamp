@@ -5,7 +5,7 @@ launch:
     name: "icp_odom"
     remap:
       - { from: "scan", to: "/scan" }
-      - { from: "odom", to: "/icp/odom" }
+      - { from: "odom", to: "/icp/odom_raw" }
     param:
       # - { name: "scan_downsampling_step", value: 1 }
       # - { name: "scan_voxel_size", value: 0.0 }
@@ -14,5 +14,5 @@ launch:
       # - { name: "deskewing_slerp", value: false }
       - { name: "frame_id", value: "base_link" }
       - { name: "Odom/ResetCountdown", value: "1" }
-      - { name: "publish_tf", value: true }
+      - { name: "publish_tf", value: false }
     args: "--ros-args --log-level warn"

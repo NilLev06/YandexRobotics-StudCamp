@@ -1,0 +1,14 @@
+[Unit]
+Description=RBM Web Terminal (host)
+After=network.target
+
+[Service]
+Type=simple
+User=keyboard
+WorkingDirectory=/home/keyboard
+ExecStart=/home/keyboard/.setup/ttyd -W -p 8100 tmux new -A -s webtmux bash
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

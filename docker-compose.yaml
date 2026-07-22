@@ -1,0 +1,29 @@
+services:
+  ros:
+    image: robomarvel/fleet:cartographer-20260721
+    build: .
+    platform: linux/arm64
+    container_name: ros
+    privileged: true
+    restart: "no"
+    entrypoint: ["/src/entrypoint.sh"]
+    ulimits:
+      core: 0
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '[r]os2 launch main main.yaml' >/dev/null && pgrep -x mediamtx >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    ports:
+      - 8765:8765
+      - 8080:8080
+      - 8090:8090
+      - 8091:8091
+      - 8889:8889
+      - 8189:8189/udp
+    volumes:
+      - ".:/src"
+      - "/dev:/dev"
+      - "/run/udev:/run/udev:ro"
+      - "./vendor/mediamtx-1.18.1-arm64-patched:/usr/bin/mediamtx:ro"

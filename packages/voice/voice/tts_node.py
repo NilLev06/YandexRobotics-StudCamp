@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, '/root/venv/lib/python3.12/site-packages')
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
@@ -14,6 +17,7 @@ class TTSNode(Node):
 
         # Параметры
         self.declare_parameter('iam_token', '')
+        self.declare_parameter('api_key_file', '/src/rover_m2m/rover-m2m.env')
         self.declare_parameter('folder_id', '')
         self.declare_parameter('voice', 'alena')  # filipp, ermil, jane, alena
         self.declare_parameter('speed', 1.0)
@@ -21,11 +25,10 @@ class TTSNode(Node):
         # Получение параметров
         self.iam_token = self.get_parameter('iam_token').value
         self.folder_id = self.get_parameter('folder_id').value
+        self.api_key = self.read_api_key(self.get_parameter('api_key_file').value)
 
-        self.audio = None
-
-        if not self.iam_token:
-            self.get_logger().error('IAM token not provided!')
+        if not self.iam_token and not self.api_key:
+            self.get_logger().error('Neither IAM token nor API key provided!')
             return
 
         # Subscriber на текст для озвучивания
@@ -40,6 +43,17 @@ class TTSNode(Node):
         self.audio = pyaudio.PyAudio()
 
         self.get_logger().info('TTS Node started (API v3)')
+
+    @staticmethod
+    def read_api_key(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as config:
+                for line in config:
+                    if line.startswith('YANDEX_API_KEY='):
+                        return line.split('=', 1)[1].strip().strip('"\'')
+        except OSError:
+            pass
+        return ''
 
     def speak_callback(self, msg):
         """Синтез и воспроизведение речи"""
@@ -69,12 +83,13 @@ class TTSNode(Node):
         stub = tts_service_pb2_grpc.SynthesizerStub(channel)
 
         # Подготовка метаданных для авторизации
-        metadata_list = [
-            ('authorization', f'Bearer {self.iam_token}'),
-        ]
+        if self.api_key:
+            metadata_list = [('authorization', f'Api-Key {self.api_key}')]
+        else:
+            metadata_list = [('authorization', f'Bearer {self.iam_token}')]
 
-        # Добавляем folder_id если он указан
-        if self.folder_id:
+        # Folder ID is used with IAM tokens. API-key requests infer its folder.
+        if self.folder_id and not self.api_key:
             metadata_list.append(('x-folder-id', self.folder_id))
 
         # Параметры синтеза
@@ -140,8 +155,7 @@ class TTSNode(Node):
 
     def destroy_node(self):
         """Корректное завершение"""
-        if self.audio is not None:
-            self.audio.terminate()
+        self.audio.terminate()
         super().destroy_node()
 
 def main(args=None):

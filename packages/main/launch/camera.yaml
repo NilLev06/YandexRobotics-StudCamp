@@ -1,16 +1,3 @@
-# Standalone ROS image topic for the camera, separate from the RTSP/mediamtx
-# path YOLO uses. NOT included in main.yaml: on this hardware the camera
-# sensor is normally a single-consumer resource (libcamera), so running this
-# at the same time as the RTSP pipeline may fail to open the camera or steal
-# frames from it. Launch this manually only when the RTSP/YOLO pipeline is
-# stopped, or after confirming on the actual rover that both can coexist.
-#
-# camera_info_url was previously pointed at a camera_info.yaml file that does
-# not exist in this repo (dead reference -- would have failed to load
-# silently). Removed rather than faked: with no camera_info_url set,
-# camera_ros publishes an honestly-uncalibrated CameraInfo (D=[], zeroed K)
-# instead of a fabricated calibration. Add a real camera_info_url only once
-# the camera has actually been calibrated (checkerboard + camera_calibration).
 launch:
 - node:
     pkg: "camera_ros"
@@ -18,6 +5,6 @@ launch:
     name: "camera_node"
     output: "log"
     param:
-    # https://github.com/christianrauch/camera_ros#static-camera-stream-configuration
     - { name: "width", value: 640 }
     - { name: "height", value: 480 }
+    # camera_info_url can be added after a real camera calibration file exists.

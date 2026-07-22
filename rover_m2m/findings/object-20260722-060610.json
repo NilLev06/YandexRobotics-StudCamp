@@ -1,0 +1,13 @@
+{
+  "found": true,
+  "target": "мяч",
+  "confidence": 0.95,
+  "bbox": [
+    0.96,
+    0.61,
+    1.0,
+    0.76
+  ],
+  "evidence": "Orange spherical object, likely a sports ball, is partially visible at the extreme right edge of the frame, resting on the floor.",
+  "_temporal_batch": false
+}
