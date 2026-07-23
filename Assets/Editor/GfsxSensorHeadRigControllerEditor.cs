@@ -21,7 +21,6 @@ internal sealed class GfsxSensorHeadRigControllerEditor : Editor
 
     private SerializedProperty readKeyboard;
     private SerializedProperty degreesPerSecond;
-    private SerializedProperty showControlsOverlay;
     private SerializedProperty s5YawLocalAxis;
     private SerializedProperty s6PitchLocalAxis;
 
@@ -53,8 +52,6 @@ internal sealed class GfsxSensorHeadRigControllerEditor : Editor
         readKeyboard = serializedObject.FindProperty("readKeyboard");
         degreesPerSecond = serializedObject.FindProperty(
             "degreesPerSecond");
-        showControlsOverlay = serializedObject.FindProperty(
-            "showControlsOverlay");
         s5YawLocalAxis = serializedObject.FindProperty(
             "s5YawLocalAxis");
         s6PitchLocalAxis = serializedObject.FindProperty(
@@ -101,7 +98,6 @@ internal sealed class GfsxSensorHeadRigControllerEditor : Editor
         EditorGUILayout.Space(7f);
         EditorGUILayout.PropertyField(readKeyboard);
         EditorGUILayout.PropertyField(degreesPerSecond);
-        EditorGUILayout.PropertyField(showControlsOverlay);
 
         EditorGUILayout.Space(7f);
         EditorGUILayout.PropertyField(s5YawLocalAxis);

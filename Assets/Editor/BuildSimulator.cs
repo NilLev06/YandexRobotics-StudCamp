@@ -1,13 +1,15 @@
 using System.IO;
+using Unity.MLAgents.Policies;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public static class BuildSimulator
 {
     private static readonly string[] Scenes =
     {
-        "Assets/Scenes/P2_DigitalTwin.unity",
         "Assets/Scenes/P3_DigitalTwin_FixedArm.unity"
     };
     private const string LinuxBuildPath = "Build/GFSX_Simulator";
@@ -15,6 +17,9 @@ public static class BuildSimulator
 
     public static void BuildLinux()
     {
+        // Visual Validation can leave P2 in InferenceOnly — force training mode before build.
+        ForceTrainingBehaviorOnScenes();
+
         BuildPlayerOptions options = new BuildPlayerOptions
         {
             scenes = Scenes,
@@ -44,6 +49,38 @@ public static class BuildSimulator
 
         Debug.Log($"Build succeeded: {LinuxBuildPath}");
         EditorApplication.Exit(0);
+    }
+
+    private static void ForceTrainingBehaviorOnScenes()
+    {
+        for (int sceneIndex = 0; sceneIndex < Scenes.Length; sceneIndex++)
+        {
+            string scenePath = Scenes[sceneIndex];
+            Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+            if (!scene.IsValid())
+                continue;
+
+            RobotBrain[] agents = Object.FindObjectsByType<RobotBrain>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
+            for (int agentIndex = 0; agentIndex < agents.Length; agentIndex++)
+            {
+                RobotBrain agent = agents[agentIndex];
+                BehaviorParameters behavior = agent.GetComponent<BehaviorParameters>();
+                if (behavior != null)
+                {
+                    behavior.BehaviorType = BehaviorType.Default;
+                    behavior.Model = null;
+                    EditorUtility.SetDirty(behavior);
+                }
+
+                EditorUtility.SetDirty(agent);
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            Debug.Log($"BuildSimulator: forced training BehaviorType=Default on {scenePath}");
+        }
     }
 
     private static string FindGrpcSourcePath(string projectRoot)

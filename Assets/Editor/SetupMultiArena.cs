@@ -122,8 +122,8 @@ public static class SetupMultiArena
         so.FindProperty("yoloCamera").objectReferenceValue = camera;
         so.FindProperty("halfExtents").vector2Value = new Vector2(2.8f, 2.0f);
         so.FindProperty("spawnObstacles").boolValue = true;
-        so.FindProperty("minObstacles").intValue = 6;
-        so.FindProperty("maxObstacles").intValue = 12;
+        so.FindProperty("minObstacles").intValue = 8;
+        so.FindProperty("maxObstacles").intValue = 8;
         so.FindProperty("obstacleSize").vector3Value = new Vector3(0.36f, 0.14f, 0.24f);
         so.FindProperty("randomizeRobotPose").boolValue = true;
         so.FindProperty("robotPassageWidth").floatValue = 0.55f;

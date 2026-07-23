@@ -47,9 +47,9 @@ public sealed class GfsxSensorHeadRigController : MonoBehaviour
     private float s6MaximumAngle = 45f;
 
     [Header("Keyboard and compact HUD")]
-    [SerializeField] private bool readKeyboard = true;
+    [Header("Keyboard (optional debug)")]
+    [SerializeField] private bool readKeyboard = false;
     [SerializeField, Min(1f)] private float degreesPerSecond = 45f;
-    [SerializeField] private bool showControlsOverlay = true;
 
     [Header("Unity local servo axes (scene calibration)")]
     [SerializeField] private Vector3 s5YawLocalAxis = Vector3.up;
@@ -458,62 +458,5 @@ public sealed class GfsxSensorHeadRigController : MonoBehaviour
         joint.localScale = localScale;
         joint.localRotation =
             neutralRotation * Quaternion.AngleAxis(angle, axis.normalized);
-    }
-
-    private void OnGUI()
-    {
-        if (!Application.isPlaying || !showControlsOverlay)
-            return;
-
-        const float width = 282f;
-        const float height = 91f;
-        float x = Mathf.Max(12f, Screen.width - width - 12f);
-        const float y = 12f;
-
-        GUI.Box(
-            new Rect(x, y, width, height),
-            "SENSOR SERVOS  •  U = CENTER");
-
-        float requestedS5 = DrawServoRow(
-            "S5 pan  ←/→",
-            s5PanAngle,
-            s5MinimumAngle,
-            s5MaximumAngle,
-            x,
-            y + 31f);
-        float requestedS6 = DrawServoRow(
-            "S6 tilt  ↓/↑",
-            s6TiltAngle,
-            s6MinimumAngle,
-            s6MaximumAngle,
-            x,
-            y + 58f);
-
-        if (!Mathf.Approximately(requestedS5, s5PanAngle) ||
-            !Mathf.Approximately(requestedS6, s6TiltAngle))
-        {
-            SetServoCommands(requestedS5, requestedS6);
-        }
-    }
-
-    private static float DrawServoRow(
-        string label,
-        float value,
-        float minimum,
-        float maximum,
-        float x,
-        float y)
-    {
-        GUI.Label(new Rect(x + 12f, y, 88f, 22f), label);
-        value = GUI.HorizontalSlider(
-            new Rect(x + 104f, y + 6f, 118f, 18f),
-            value,
-            minimum,
-            maximum);
-        value = Mathf.Clamp(value, minimum, maximum);
-        GUI.Label(
-            new Rect(x + 224f, y, 54f, 22f),
-            $"{value:F1}°");
-        return value;
     }
 }

@@ -10,8 +10,6 @@ using UnityEngine.Serialization;
 public sealed class GfsxArmRigController : MonoBehaviour
 {
     public const float DefaultS4MaximumClosureCommand = 22f;
-    private static readonly string[] BinaryJawLabels =
-        { "OPEN", "CLOSED" };
 
     public enum S4JawControlMode
     {
@@ -87,24 +85,26 @@ public sealed class GfsxArmRigController : MonoBehaviour
      InspectorName("Open Jaw Hinge Angle (degrees)")]
     private float openJawOpeningAngle = 40f;
 
-    [Header("Keyboard")]
-    [SerializeField] private bool readKeyboard = true;
+    [Header("Keyboard (Inspector only; no on-screen buttons)")]
+    [SerializeField] private bool readKeyboard = false;
     [SerializeField] private float armDegreesPerSecond = 35f;
-    [SerializeField] private bool showControlsOverlay = true;
 
-    [Header("Episode start pose (straight arm, S1 sets height)")]
-    [Tooltip("S1 shoulder — only joint lowered for floor pickup.")]
-    [SerializeField] private float floorPickupS1 = -38f;
-    [Tooltip("S2 elbow — 0° keeps the arm strictly straight.")]
-    [SerializeField] private float floorPickupS2 = 0f;
-    [SerializeField] private float floorPickupS3 = 90f;
+    [Header("Fixed floor-pickup pose (calibrated)")]
+    [Tooltip("S1 shoulder — calibrated fixed-arm floor pickup.")]
+    [SerializeField] private float floorPickupS1 = -46f;
+    [Tooltip("S2 elbow bend.")]
+    [SerializeField] private float floorPickupS2 = 10f;
+    [Tooltip("S3 wrist roll.")]
+    [SerializeField] private float floorPickupS3 = -90f;
 
-    [Header("Floor clearance (no ground contact)")]
-    [Tooltip("Claw tip must stay strictly above the floor by this margin (metres). Near-zero, but non-contact.")]
-    [SerializeField, Min(0.0005f)] private float minTipClearanceMetres = 0.003f;
+    [Header("Floor clearance (NO ground contact — hard geometric gap)")]
+    [Tooltip("Claw tip / mesh / colliders must stay above the floor by this margin (metres). Never zero.")]
+    [SerializeField, Min(0.005f)] private float minTipClearanceMetres = 0.025f;
     [Tooltip("How far above floor-pickup S1 the clearance fixer may raise the shoulder.")]
-    [SerializeField, Range(0f, 40f)] private float maxClearanceRaiseDegrees = 12f;
+    [SerializeField, Range(0f, 40f)] private float maxClearanceRaiseDegrees = 0f;
     [SerializeField] private LayerMask floorRaycastLayers = ~0;
+    [Tooltip("If still below clearance after normal raise, allow this absolute S1 ceiling.")]
+    [SerializeField] private float absoluteClearanceS1Ceiling = 15f;
 
     private readonly RaycastHit[] floorHitBuffer = new RaycastHit[16];
 
@@ -200,7 +200,12 @@ public sealed class GfsxArmRigController : MonoBehaviour
     public float ClawTipClearanceAboveFloor => GetClawClearanceAboveFloor();
     /// <summary>Highest S1 the floor-clearance helper is allowed to command.</summary>
     public float MaxS1ForFloorClearance =>
-        Mathf.Min(s1MaximumAngle, floorPickupS1 + maxClearanceRaiseDegrees);
+        Mathf.Min(
+            s1MaximumAngle,
+            Mathf.Max(floorPickupS1 + maxClearanceRaiseDegrees, absoluteClearanceS1Ceiling));
+
+    public bool IsClawClearOfFloor =>
+        GetClawClearanceAboveFloor() >= minTipClearanceMetres - 1e-4f;
 
     private void Update()
     {
@@ -210,12 +215,24 @@ public sealed class GfsxArmRigController : MonoBehaviour
         ApplyPose();
     }
 
+    private void FixedUpdate()
+    {
+        if (!Application.isPlaying)
+            return;
+
+        // Physics / agent actions happen on FixedUpdate — re-enforce here so the
+        // claw cannot dip into the floor between LateUpdate frames.
+        // Skip when clearance raise is disabled (strict calibrated floor pose).
+        if (maxClearanceRaiseDegrees > 0.01f)
+            EnforceFloorClearance();
+    }
+
     private void LateUpdate()
     {
         // Re-apply after every other component. This prevents individual arm
         // parts from being translated, scaled, or detached by runtime logic.
         ApplyPose();
-        if (Application.isPlaying)
+        if (Application.isPlaying && maxClearanceRaiseDegrees > 0.01f)
             EnforceFloorClearance();
     }
 
@@ -611,7 +628,8 @@ public sealed class GfsxArmRigController : MonoBehaviour
     }
 
     /// <summary>
-    /// Straight arm (S2=0). Only S1 shoulder sets height. S3 locked to floor pose.
+    /// Calibrated fixed-arm floor pickup. S3 wrist locked. Jaws open (S4 min).
+    /// Uses exact calibrated angles when <see cref="maxClearanceRaiseDegrees"/> is 0.
     /// </summary>
     public void SetFloorPickupPose()
     {
@@ -621,7 +639,24 @@ public sealed class GfsxArmRigController : MonoBehaviour
         s4Closure = s4MinimumClosureCommand;
         ClampCommands();
         ApplyPose();
-        EnforceFloorClearance();
+        if (maxClearanceRaiseDegrees > 0.01f)
+            EnforceFloorClearance();
+    }
+
+    /// <summary>
+    /// Re-asserts S1/S2/S3 floor-pickup angles without changing jaw open/closed state.
+    /// </summary>
+    public void SetFloorPickupPoseKeepingJaw()
+    {
+        float jaw = s4Closure;
+        s1Angle = floorPickupS1;
+        s2Angle = floorPickupS2;
+        s3WristRollAngle = floorPickupS3;
+        s4Closure = jaw;
+        ClampCommands();
+        ApplyPose();
+        if (maxClearanceRaiseDegrees > 0.01f)
+            EnforceFloorClearance();
     }
 
     /// <summary>
@@ -639,35 +674,75 @@ public sealed class GfsxArmRigController : MonoBehaviour
     }
 
     /// <summary>
-    /// Raises only S1 until the claw tip is strictly above the floor by
-    /// <see cref="minTipClearanceMetres"/>. Never raises past
-    /// <see cref="MaxS1ForFloorClearance"/> so a bad floor raycast cannot
-    /// fold the arm into the sky.
+    /// Raises S1 and, if needed, unfolds S2 toward the floor-pickup pose until
+    /// claw geometry stays strictly above the floor by
+    /// <see cref="minTipClearanceMetres"/>. Never allows contact.
     /// </summary>
     public bool EnforceFloorClearance()
     {
+        // Strict calibrated pose: never raise S1 above floorPickupS1.
+        if (maxClearanceRaiseDegrees <= 0.01f)
+            return false;
+
         bool clamped = false;
         float s1Ceiling = MaxS1ForFloorClearance;
 
-        for (int attempt = 0; attempt < 32; attempt++)
+        for (int attempt = 0; attempt < 64; attempt++)
         {
             Physics.SyncTransforms();
-            if (GetClawClearanceAboveFloor() >= minTipClearanceMetres)
+            float clearance = GetClawClearanceAboveFloor();
+            if (clearance >= minTipClearanceMetres)
                 return clamped;
 
-            if (s1Angle >= s1Ceiling - 0.01f)
-                return clamped;
+            bool moved = false;
+            float deficit = minTipClearanceMetres - clearance;
+            float s1Step = deficit > 0.04f ? 3f : (deficit > 0.015f ? 1.5f : 0.75f);
 
-            s1Angle = Mathf.Min(s1Angle + 1.0f, s1Ceiling);
+            if (s1Angle < s1Ceiling - 0.01f)
+            {
+                s1Angle = Mathf.Min(s1Angle + s1Step, s1Ceiling);
+                moved = true;
+            }
+
+            // Folded elbow digs the claw into the floor — straighten toward
+            // the floor-pickup S2 (usually 0°) when S1 alone is not enough.
+            float s2Target = floorPickupS2;
+            if (Mathf.Abs(s2Angle - s2Target) > 0.5f)
+            {
+                float s2Step = deficit > 0.03f ? 8f : 4f;
+                s2Angle = Mathf.MoveTowards(s2Angle, s2Target, s2Step);
+                moved = true;
+            }
+
+            if (!moved)
+                break;
+
             ClampCommands();
             ApplyPose();
             clamped = true;
         }
 
         Physics.SyncTransforms();
+        if (GetClawClearanceAboveFloor() < minTipClearanceMetres)
+        {
+            // Last resort: known-safe floor-pickup shoulder/elbow, raised hard.
+            s1Angle = Mathf.Min(
+                Mathf.Max(floorPickupS1 + 8f, absoluteClearanceS1Ceiling),
+                s1MaximumAngle);
+            s2Angle = floorPickupS2;
+            ClampCommands();
+            ApplyPose();
+            Physics.SyncTransforms();
+            clamped = true;
+        }
+
         return clamped;
     }
 
+    /// <summary>
+    /// Absolute world-space gap between the lowest claw geometry and the floor.
+    /// Positive = above floor. Negative = penetrating.
+    /// </summary>
     public float GetClawClearanceAboveFloor()
     {
         return GetClawLowestWorldY() - GetFloorSurfaceY();
@@ -675,6 +750,26 @@ public sealed class GfsxArmRigController : MonoBehaviour
 
     private float GetFloorSurfaceY()
     {
+        // Prefer the authored Ground plane when present (multi-arena safe).
+        Transform arenaRoot = GetComponentInParent<TrainingArena>() != null
+            ? GetComponentInParent<TrainingArena>().transform
+            : transform.root;
+        Transform ground = arenaRoot != null ? arenaRoot.Find("Ground") : null;
+        if (ground == null)
+        {
+            GameObject groundObject = GameObject.Find("Ground");
+            if (groundObject != null)
+                ground = groundObject.transform;
+        }
+
+        if (ground != null)
+        {
+            Collider groundCollider = ground.GetComponent<Collider>();
+            if (groundCollider != null)
+                return groundCollider.bounds.max.y;
+            return ground.position.y;
+        }
+
         Vector3 origin = holdPoint != null
             ? holdPoint.position
             : (s1ShoulderPivot != null ? s1ShoulderPivot.position : transform.position);
@@ -891,122 +986,5 @@ public sealed class GfsxArmRigController : MonoBehaviour
         joint.localScale = localScale;
         joint.localRotation =
             neutralRotation * Quaternion.AngleAxis(angle, axis.normalized);
-    }
-
-    private void OnGUI()
-    {
-        if (!Application.isPlaying || !showControlsOverlay)
-            return;
-
-        const float width = 350f;
-        const float height = 202f;
-
-        GUI.Box(new Rect(12f, 12f, width, height), "GFS-X SERVOS");
-
-        float requestedS1 = DrawServoRow(
-            "S1 shoulder  1/2",
-            s1Angle,
-            s1MinimumAngle,
-            s1MaximumAngle,
-            43f);
-        float requestedS2 = DrawServoRow(
-            "S2 elbow     3/4",
-            s2Angle,
-            s2MinimumAngle,
-            s2MaximumAngle,
-            71f);
-        float requestedS3 = DrawServoRow(
-            "S3 wrist roll 5/6",
-            s3WristRollAngle,
-            s3MinimumAngle,
-            s3MaximumAngle,
-            99f);
-        float requestedS4 = IsS4Binary
-            ? DrawBinaryJawRow(
-                "S4 jaws      8/7",
-                s4Closure,
-                s4MinimumClosureCommand,
-                s4MaximumClosureLimit,
-                127f)
-            : DrawServoRow(
-                "S4 jaws      8/7",
-                s4Closure,
-                s4MinimumClosureCommand,
-                s4MaximumClosureLimit,
-                127f);
-
-        bool servoChanged =
-            !Mathf.Approximately(requestedS1, s1Angle) ||
-            !Mathf.Approximately(requestedS2, s2Angle) ||
-            !Mathf.Approximately(requestedS3, s3WristRollAngle) ||
-            !Mathf.Approximately(requestedS4, s4Closure);
-
-        if (servoChanged)
-        {
-            SetServoCommands(
-                requestedS1,
-                requestedS2,
-                requestedS3,
-                requestedS4);
-        }
-
-        if (GUI.Button(new Rect(24f, 163f, 104f, 26f), "RESET"))
-            ResetToNeutral();
-
-        GUI.Label(
-            new Rect(140f, 166f, 208f, 22f),
-            IsS4Binary
-                ? $"OPEN {s4MinimumClosureCommand:F1}° | " +
-                  $"CLOSED {s4MaximumClosureLimit:F1}°"
-                : "S4 continuous: OPEN  ← slider →  CLOSED");
-    }
-
-    private static float DrawBinaryJawRow(
-        string label,
-        float value,
-        float openPosition,
-        float closedPosition,
-        float y)
-    {
-        GUI.Label(new Rect(24f, y, 112f, 22f), label);
-
-        int currentState = Mathf.InverseLerp(
-            openPosition,
-            closedPosition,
-            value) >= 0.5f
-            ? 1
-            : 0;
-        int requestedState = GUI.Toolbar(
-            new Rect(140f, y, 154f, 22f),
-            currentState,
-            BinaryJawLabels);
-        float requestedValue = requestedState == 0
-            ? openPosition
-            : closedPosition;
-
-        GUI.Label(
-            new Rect(302f, y, 54f, 22f),
-            $"{requestedValue:F1}°");
-        return requestedValue;
-    }
-
-    private static float DrawServoRow(
-        string label,
-        float value,
-        float minimum,
-        float maximum,
-        float y)
-    {
-        GUI.Label(new Rect(24f, y, 112f, 22f), label);
-
-        value = GUI.HorizontalSlider(
-            new Rect(140f, y + 6f, 154f, 18f),
-            value,
-            minimum,
-            maximum);
-
-        value = Mathf.Clamp(value, minimum, maximum);
-        GUI.Label(new Rect(302f, y, 54f, 22f), $"{value:F1}°");
-        return value;
     }
 }

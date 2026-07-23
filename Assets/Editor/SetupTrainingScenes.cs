@@ -6,31 +6,29 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Configures two training scenes:
-/// P2 — mobile arm (5 continuous: drive/cam/S1/S2), P3 — fixed arm (3 continuous).
+/// Configures FixedArm training scene P3 (3 continuous: drive + camera pan).
 /// Menu: GFS-X → Setup Training Scenes
-/// Batch: Unity -batchmode -quit -executeMethod SetupTrainingScenes.SetupBatch
 /// </summary>
 public static class SetupTrainingScenes
 {
-    private const string MobileScenePath = "Assets/Scenes/P2_DigitalTwin.unity";
     private const string FixedScenePath = "Assets/Scenes/P3_DigitalTwin_FixedArm.unity";
-    private const string MobileBehaviorName = "GFSX_Brain_Mobile";
     private const string FixedBehaviorName = "GFSX_Brain_Fixed";
+    private const int ContinuousActions = 3;
+    private const int VectorObservations = 15;
 
     [MenuItem("GFS-X/Setup Training Scenes")]
     public static void SetupFromMenu()
     {
-        if (!ConfigureAllScenes())
+        if (!ConfigureFixedScene())
             return;
 
         EditorSceneManager.SaveOpenScenes();
-        Debug.Log("Training scenes configured and saved.");
+        Debug.Log("FixedArm training scene configured and saved.");
     }
 
     public static void SetupBatch()
     {
-        if (!ConfigureAllScenes())
+        if (!ConfigureFixedScene())
         {
             EditorApplication.Exit(1);
             return;
@@ -40,27 +38,11 @@ public static class SetupTrainingScenes
         EditorApplication.Exit(0);
     }
 
-    private static bool ConfigureAllScenes()
+    private static bool ConfigureFixedScene()
     {
-        if (!ConfigureScene(MobileScenePath, RobotTrainingMode.MobileArm, MobileBehaviorName, 5))
+        if (!ConfigureScene(FixedScenePath, FixedBehaviorName, ContinuousActions))
             return false;
 
-        if (!System.IO.File.Exists(FixedScenePath))
-        {
-            if (!AssetDatabase.CopyAsset(MobileScenePath, FixedScenePath))
-            {
-                Debug.LogError($"Failed to copy {MobileScenePath} to {FixedScenePath}.");
-                return false;
-            }
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-        }
-
-        if (!ConfigureScene(FixedScenePath, RobotTrainingMode.FixedArm, FixedBehaviorName, 3))
-            return false;
-
-        AddSceneToBuildSettings(MobileScenePath);
         AddSceneToBuildSettings(FixedScenePath);
         AssetDatabase.SaveAssets();
         return true;
@@ -68,7 +50,6 @@ public static class SetupTrainingScenes
 
     private static bool ConfigureScene(
         string scenePath,
-        RobotTrainingMode mode,
         string behaviorName,
         int continuousActions)
     {
@@ -79,7 +60,9 @@ public static class SetupTrainingScenes
             return false;
         }
 
-        RobotBrain[] agents = Object.FindObjectsByType<RobotBrain>(FindObjectsSortMode.None);
+        RobotBrain[] agents = Object.FindObjectsByType<RobotBrain>(
+            FindObjectsInactive.Include,
+            FindObjectsSortMode.None);
         if (agents.Length == 0)
         {
             Debug.LogError($"No RobotBrain found in {scenePath}");
@@ -87,9 +70,7 @@ public static class SetupTrainingScenes
         }
 
         foreach (RobotBrain agent in agents)
-        {
-            ConfigureAgent(agent, mode, behaviorName, continuousActions);
-        }
+            ConfigureAgent(agent, behaviorName, continuousActions);
 
         EditorSceneManager.MarkSceneDirty(scene);
         if (!EditorSceneManager.SaveScene(scene))
@@ -98,18 +79,19 @@ public static class SetupTrainingScenes
             return false;
         }
 
-        Debug.Log($"Configured {scenePath}: mode={mode}, behavior={behaviorName}, continuous={continuousActions}");
+        Debug.Log(
+            $"Configured {scenePath}: FixedArm, behavior={behaviorName}, " +
+            $"continuous={continuousActions}, vectorObs={VectorObservations}");
         return true;
     }
 
     private static void ConfigureAgent(
         RobotBrain agent,
-        RobotTrainingMode mode,
         string behaviorName,
         int continuousActions)
     {
         SerializedObject brainObject = new SerializedObject(agent);
-        brainObject.FindProperty("trainingMode").enumValueIndex = (int)mode;
+        brainObject.FindProperty("trainingMode").enumValueIndex = (int)RobotTrainingMode.FixedArm;
         brainObject.ApplyModifiedPropertiesWithoutUndo();
 
         BehaviorParameters behaviorParameters = agent.GetComponent<BehaviorParameters>();
@@ -120,42 +102,31 @@ public static class SetupTrainingScenes
         }
 
         behaviorParameters.BehaviorName = behaviorName;
-        behaviorParameters.BrainParameters.ActionSpec =
-            new ActionSpec(continuousActions, new[] { 3 });
-        behaviorParameters.BrainParameters.VectorObservationSize = 15;
-        behaviorParameters.BrainParameters.NumStackedVectorObservations = 4;
-
+        behaviorParameters.BrainParameters.ActionSpec = new ActionSpec(
+            continuousActions,
+            new[] { 3 });
+        behaviorParameters.BrainParameters.VectorObservationSize = VectorObservations;
         EditorUtility.SetDirty(behaviorParameters);
         EditorUtility.SetDirty(agent);
-
-        VirtualSensors sensors = agent.GetComponent<VirtualSensors>();
-        if (sensors != null)
-        {
-            SerializedObject sensorsObject = new SerializedObject(sensors);
-            GfsxArmRigController armRig = agent.GetComponentInChildren<GfsxArmRigController>(true);
-            if (armRig != null)
-            {
-                sensorsObject.FindProperty("armOcclusionRoot").objectReferenceValue = armRig.transform;
-                sensorsObject.ApplyModifiedPropertiesWithoutUndo();
-                EditorUtility.SetDirty(sensors);
-            }
-        }
     }
 
     private static void AddSceneToBuildSettings(string scenePath)
     {
-        EditorBuildSettingsScene[] existing = EditorBuildSettings.scenes;
-        for (int index = 0; index < existing.Length; index++)
+        EditorBuildSettingsScene[] scenes = EditorBuildSettings.scenes;
+        for (int i = 0; i < scenes.Length; i++)
         {
-            if (existing[index].path == scenePath)
+            if (scenes[i].path == scenePath)
+            {
+                scenes[i].enabled = true;
+                EditorBuildSettings.scenes = scenes;
                 return;
+            }
         }
 
-        EditorBuildSettingsScene[] updated = new EditorBuildSettingsScene[existing.Length + 1];
-        for (int index = 0; index < existing.Length; index++)
-            updated[index] = existing[index];
-
-        updated[existing.Length] = new EditorBuildSettingsScene(scenePath, true);
-        EditorBuildSettings.scenes = updated;
+        var list = new System.Collections.Generic.List<EditorBuildSettingsScene>(scenes)
+        {
+            new EditorBuildSettingsScene(scenePath, true)
+        };
+        EditorBuildSettings.scenes = list.ToArray();
     }
 }

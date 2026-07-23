@@ -19,6 +19,10 @@ public sealed class GfsxArmRigControllerEditor : Editor
     private SerializedProperty s4MaximumClosureLimit;
     private SerializedProperty closedJawOpeningAngle;
     private SerializedProperty openJawOpeningAngle;
+    private SerializedProperty readKeyboard;
+    private SerializedProperty floorPickupS1;
+    private SerializedProperty floorPickupS2;
+    private SerializedProperty floorPickupS3;
     private bool showAdvancedSetup;
 
     private void OnEnable()
@@ -42,6 +46,10 @@ public sealed class GfsxArmRigControllerEditor : Editor
             "closedJawOpeningAngle");
         openJawOpeningAngle = serializedObject.FindProperty(
             "openJawOpeningAngle");
+        readKeyboard = serializedObject.FindProperty("readKeyboard");
+        floorPickupS1 = serializedObject.FindProperty("floorPickupS1");
+        floorPickupS2 = serializedObject.FindProperty("floorPickupS2");
+        floorPickupS3 = serializedObject.FindProperty("floorPickupS3");
     }
 
     public override void OnInspectorGUI()
@@ -50,11 +58,29 @@ public sealed class GfsxArmRigControllerEditor : Editor
         serializedObject.Update();
 
         EditorGUILayout.HelpBox(
-            "REAL ARM CHAIN: S1 shoulder, S2 elbow bend, S3 axial wrist " +
-            "roll, and S4 jaws. The old fake S2 pivot remains removed; the " +
-            "existing bend is now labelled correctly and the missing wrist " +
-            "shaft is independent. All non-servo transforms remain locked.",
+            "FixedArm: поза пола = Floor Pickup ниже.\n" +
+            "Слайдеры S1–S4 — правка без Play. Экранных кнопок нет.\n" +
+            "Клешня закрывается только по IR/сигналу агента.",
             MessageType.Info);
+
+        EditorGUILayout.LabelField("Fixed floor-pickup pose", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(floorPickupS1, new GUIContent("S1"));
+        EditorGUILayout.PropertyField(floorPickupS2, new GUIContent("S2"));
+        EditorGUILayout.PropertyField(floorPickupS3, new GUIContent("S3"));
+        if (GUILayout.Button("Apply floor-pickup pose now"))
+        {
+            Undo.RecordObject(controller, "Apply floor-pickup pose");
+            controller.SetFloorPickupPose();
+            CommitPose(controller);
+        }
+
+        EditorGUILayout.Space(6f);
+        EditorGUILayout.PropertyField(readKeyboard, new GUIContent("Read Keyboard (debug)"));
+
+        EditorGUILayout.Space(6f);
+        EditorGUILayout.HelpBox(
+            "REAL ARM CHAIN: S1 shoulder, S2 elbow bend, S3 wrist roll, S4 jaws.",
+            MessageType.None);
 
         EditorGUI.BeginChangeCheck();
 
@@ -189,7 +215,11 @@ public sealed class GfsxArmRigControllerEditor : Editor
             "s4MinimumClosureCommand",
             "s4MaximumClosureLimit",
             "closedJawOpeningAngle",
-            "openJawOpeningAngle");
+            "openJawOpeningAngle",
+            "readKeyboard",
+            "floorPickupS1",
+            "floorPickupS2",
+            "floorPickupS3");
 
         if (serializedObject.ApplyModifiedProperties())
             CommitPose(controller);

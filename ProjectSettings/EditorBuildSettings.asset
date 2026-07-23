@@ -6,9 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/P2_DigitalTwin.unity
-    guid: f2fc78a2555f64858a6a2112acdadae3
-  - enabled: 1
     path: Assets/Scenes/P3_DigitalTwin_FixedArm.unity
     guid: e2419eaa4a335c765baa4b573608fe36
   m_configObjects:

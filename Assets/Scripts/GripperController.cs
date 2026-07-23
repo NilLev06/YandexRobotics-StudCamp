@@ -3,9 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Logical grasping for the GFS-X claw. A detected TargetBall becomes
-/// kinematic, has its colliders disabled, and follows HoldPoint until the
-/// S4 jaws are opened again.
+/// Logical grasping for the GFS-X claw. Capture requires the ball to sit
+/// inside the jaw volume AND the gripper IR to see it — no remote stick.
 /// </summary>
 [DefaultExecutionOrder(100)]
 [DisallowMultipleComponent]
@@ -13,6 +12,7 @@ public sealed class GripperController : MonoBehaviour
 {
     private const int MaximumGraspCandidates = 32;
     private const string TargetBallTag = "TargetBall";
+    private const float BallRadiusMetres = 0.025f;
 
     public enum ReleaseVelocityMode
     {
@@ -34,11 +34,15 @@ public sealed class GripperController : MonoBehaviour
     private float releaseClosureThreshold = 0.25f;
 
     [Header("Physical grasp volume (world metres)")]
-    [SerializeField, Range(0.005f, 0.15f)]
+    [SerializeField, Range(0.005f, 0.08f)]
     [Tooltip(
-        "Radius around HoldPoint in which a tagged ball can be captured. " +
-        "This covers the space between the real jaw meshes.")]
-    private float graspRadius = 0.04f;
+        "Sphere radius around HoldPoint. Keep near ball radius so the ball " +
+        "cannot stick through closed jaws from outside.")]
+    private float graspRadius = 0.028f;
+    [Tooltip("Half-size of the jaw pocket in HoldPoint local space (metres).")]
+    [SerializeField] private Vector3 jawPocketHalfExtents = new Vector3(0.022f, 0.018f, 0.03f);
+    [Tooltip("Grab only when gripper IR reports the ball between the jaws.")]
+    [SerializeField] private bool requireGripperIrForGrab = true;
     [SerializeField] private LayerMask graspLayers = ~0;
     [SerializeField] private bool drawGraspVolume = true;
 
@@ -67,6 +71,7 @@ public sealed class GripperController : MonoBehaviour
     private Vector3 capturedAngularVelocity;
 
     private bool grabArmed;
+    private float previousClosure01 = -1f;
     private readonly Collider[] graspCandidateBuffer =
         new Collider[MaximumGraspCandidates];
 
@@ -86,9 +91,13 @@ public sealed class GripperController : MonoBehaviour
     public float GrabClosureThreshold => grabClosureThreshold;
     public float ReleaseClosureThreshold => releaseClosureThreshold;
     public float GraspRadius => graspRadius;
+    public bool RequireGripperIrForGrab => requireGripperIrForGrab;
+    public bool IsGrabArmed => grabArmed;
     public float NormalizedClosure => armController != null
         ? armController.S4NormalizedClosure
         : 0f;
+    public bool AreJawsOpen => NormalizedClosure <= releaseClosureThreshold;
+    public bool AreJawsClosedEnough => NormalizedClosure >= grabClosureThreshold;
     public bool ConfigurationIsComplete =>
         armController != null && sensors != null && holdPoint != null;
 
@@ -127,10 +136,10 @@ public sealed class GripperController : MonoBehaviour
     }
 
     /// <summary>
-    /// Evaluates the real S4 command. Once a close cycle is armed, capture is
-    /// retried while S4 remains beyond the closing threshold. The old
-    /// one-frame threshold check could miss a ball that settled between the
-    /// physical jaw colliders one physics frame later.
+    /// Capture only on an open→close edge: jaws must first go below the
+    /// release threshold (open), then past the grab threshold (close).
+    /// A claw that stays closed cannot vacuum-stick a ball that later
+    /// enters the pocket.
     /// </summary>
     public void EvaluateNow()
     {
@@ -144,10 +153,6 @@ public sealed class GripperController : MonoBehaviour
         }
         else if (heldBody == null)
         {
-            // A Rigidbody component can be destroyed without destroying its
-            // GameObject. Detach the surviving transform and restore its
-            // colliders instead of leaving a permanently disabled ball in
-            // HoldPoint.
             ReleaseAfterLostRigidbody();
         }
 
@@ -159,6 +164,7 @@ public sealed class GripperController : MonoBehaviour
                 closure01 <= releaseClosureThreshold)
             {
                 Release();
+                // Opening after release re-arms for the next object.
                 grabArmed = closure01 <= releaseClosureThreshold;
             }
             else
@@ -166,91 +172,111 @@ public sealed class GripperController : MonoBehaviour
                 SnapHeldObjectToHoldPoint();
             }
 
+            previousClosure01 = closure01;
             return;
         }
 
         if (!ConfigurationIsComplete)
-            return;
-
-        if (closure01 <= releaseClosureThreshold)
-            grabArmed = true;
-
-        if (grabArmed &&
-            closure01 >= grabClosureThreshold &&
-            TryGrabDetectedBall())
         {
-            // Re-open below the release threshold to arm the next object.
-            grabArmed = false;
+            previousClosure01 = closure01;
+            return;
         }
+
+        bool jawsOpen = closure01 <= releaseClosureThreshold;
+        bool jawsClosed = closure01 >= grabClosureThreshold;
+
+        if (jawsOpen)
+        {
+            grabArmed = true;
+            previousClosure01 = closure01;
+            return;
+        }
+
+        if (jawsClosed)
+        {
+            if (grabArmed)
+            {
+                // Rising-edge close after a real open. Always consume the arm
+                // so a failed close cannot stick later without reopening.
+                TryGrabDetectedBall(requireOpenCloseCycle: false);
+                grabArmed = false;
+            }
+
+            previousClosure01 = closure01;
+            return;
+        }
+
+        // Mid-travel: keep armed state only if we already saw a full open.
+        previousClosure01 = closure01;
     }
 
     /// <summary>
-    /// Grasps the nearest TargetBall inside the physical HoldPoint volume,
-    /// falling back to the directional gripper IR sensor. The jaws must
-    /// already be at or beyond the configured close threshold.
+    /// Grasps only when the ball is inside the jaw pocket, IR sees it, jaws
+    /// are closed enough, and (by default) an open→close cycle was armed.
     /// </summary>
-    public bool TryGrabDetectedBall()
+    public bool TryGrabDetectedBall(bool requireOpenCloseCycle = true)
     {
         if (IsHolding ||
             !ConfigurationIsComplete ||
-            NormalizedClosure < grabClosureThreshold)
+            !AreJawsClosedEnough)
         {
             return false;
         }
 
+        if (requireOpenCloseCycle && !grabArmed)
+            return false;
+
         Physics.SyncTransforms();
-
-        if (TryFindNearestBallInGraspVolume(
-                out Rigidbody volumeCandidate,
-                out GameObject volumeTaggedBall) &&
-            TryGrabInternal(volumeCandidate, volumeTaggedBall))
-        {
-            return true;
-        }
-
         sensors.SampleNow();
 
-        Rigidbody candidate = sensors.DetectedBallRigidbody;
-        GameObject taggedBall = sensors.DetectedBall;
-        return TryGrabInternal(candidate, taggedBall);
+        if (requireGripperIrForGrab && !sensors.GripperIrDetected)
+            return false;
+
+        if (!TryFindNearestBallInJawPocket(
+                out Rigidbody volumeCandidate,
+                out GameObject volumeTaggedBall))
+        {
+            return false;
+        }
+
+        bool grabbed = TryGrabInternal(volumeCandidate, volumeTaggedBall);
+        if (grabbed)
+            grabArmed = false;
+        return grabbed;
     }
 
     /// <summary>
-    /// Explicit ROS/ML entry point. The Rigidbody (or one of its descendants)
-    /// must carry the TargetBall tag and the jaws must be sufficiently closed.
+    /// Explicit ROS/ML entry point. Requires jaws closed enough, IR, jaw
+    /// pocket, and an armed open→close cycle.
     /// </summary>
     public bool TryGrab(Rigidbody candidate)
     {
         if (candidate == null ||
             sensors == null ||
-            NormalizedClosure < grabClosureThreshold)
+            !AreJawsClosedEnough ||
+            !grabArmed)
         {
             return false;
         }
 
         Physics.SyncTransforms();
-        GameObject taggedBall = null;
-        bool candidateIsInVolume =
-            TryFindNearestBallInGraspVolume(
+        sensors.SampleNow();
+
+        if (requireGripperIrForGrab && !sensors.GripperIrDetected)
+            return false;
+
+        if (!TryFindNearestBallInJawPocket(
                 out Rigidbody volumeCandidate,
-                out GameObject volumeTaggedBall) &&
-            volumeCandidate == candidate;
-
-        if (candidateIsInVolume)
+                out GameObject volumeTaggedBall) ||
+            volumeCandidate != candidate)
         {
-            taggedBall = volumeTaggedBall;
-        }
-        else
-        {
-            sensors.SampleNow();
-            if (sensors.DetectedBallRigidbody != candidate)
-                return false;
-
-            taggedBall = sensors.DetectedBall ??
-                FindTaggedBallObject(candidate);
+            return false;
         }
 
-        return TryGrabInternal(candidate, taggedBall);
+        bool grabbed = TryGrabInternal(candidate, volumeTaggedBall);
+        if (grabbed)
+            grabArmed = false;
+        return grabbed;
     }
 
     public bool Release()
@@ -514,7 +540,7 @@ public sealed class GripperController : MonoBehaviour
         return null;
     }
 
-    private bool TryFindNearestBallInGraspVolume(
+    private bool TryFindNearestBallInJawPocket(
         out Rigidbody nearestBody,
         out GameObject nearestTaggedBall)
     {
@@ -524,9 +550,12 @@ public sealed class GripperController : MonoBehaviour
         if (holdPoint == null || graspRadius <= 0f)
             return false;
 
+        float searchRadius = Mathf.Max(
+            graspRadius,
+            jawPocketHalfExtents.magnitude + BallRadiusMetres * 0.5f);
         int hitCount = Physics.OverlapSphereNonAlloc(
             holdPoint.position,
-            graspRadius,
+            searchRadius,
             graspCandidateBuffer,
             graspLayers,
             QueryTriggerInteraction.Ignore);
@@ -554,10 +583,11 @@ public sealed class GripperController : MonoBehaviour
             if (!HasTargetBallTag(taggedBall))
                 continue;
 
-            Vector3 closestPoint = candidateCollider.ClosestPoint(
-                holdPoint.position);
+            if (!IsBallCenterInsideJawPocket(taggedBall.transform.position))
+                continue;
+
             float squaredDistance =
-                (closestPoint - holdPoint.position).sqrMagnitude;
+                (taggedBall.transform.position - holdPoint.position).sqrMagnitude;
             if (squaredDistance >= nearestSquaredDistance)
                 continue;
 
@@ -567,6 +597,26 @@ public sealed class GripperController : MonoBehaviour
         }
 
         return nearestBody != null && nearestTaggedBall != null;
+    }
+
+    /// <summary>
+    /// Ball centre must sit inside the claw pocket (HoldPoint local box).
+    /// Surface proximity alone is not enough — prevents stick-through.
+    /// </summary>
+    public bool IsBallCenterInsideJawPocket(Vector3 ballWorldPosition)
+    {
+        if (holdPoint == null)
+            return false;
+
+        Vector3 local = holdPoint.InverseTransformPoint(ballWorldPosition);
+        Vector3 half = jawPocketHalfExtents;
+        if (half.x < 0.005f) half.x = 0.005f;
+        if (half.y < 0.005f) half.y = 0.005f;
+        if (half.z < 0.005f) half.z = 0.005f;
+
+        return Mathf.Abs(local.x) <= half.x &&
+               Mathf.Abs(local.y) <= half.y &&
+               Mathf.Abs(local.z) <= half.z;
     }
 
     private static bool HasTargetBallTag(GameObject candidate)
@@ -690,13 +740,19 @@ public sealed class GripperController : MonoBehaviour
             releaseClosureThreshold,
             0f,
             Mathf.Max(0f, grabClosureThreshold - 0.05f));
-        graspRadius = Mathf.Clamp(graspRadius, 0.005f, 0.15f);
+        graspRadius = Mathf.Clamp(graspRadius, 0.005f, 0.08f);
+        jawPocketHalfExtents = new Vector3(
+            Mathf.Clamp(jawPocketHalfExtents.x, 0.005f, 0.06f),
+            Mathf.Clamp(jawPocketHalfExtents.y, 0.005f, 0.06f),
+            Mathf.Clamp(jawPocketHalfExtents.z, 0.005f, 0.08f));
     }
 
     private void InitializeGripCycleState()
     {
-        grabArmed = !IsHolding &&
-            NormalizedClosure <= releaseClosureThreshold;
+        previousClosure01 = NormalizedClosure;
+        // Arm only when jaws start open. A closed claw at spawn must not grab
+        // until the agent (or auto-close) opens then closes again.
+        grabArmed = !IsHolding && AreJawsOpen;
     }
 
     private void ClearHeldState()
@@ -728,7 +784,11 @@ public sealed class GripperController : MonoBehaviour
         if (!drawGraspVolume || holdPoint == null)
             return;
 
-        Gizmos.color = new Color(0.1f, 1f, 0.35f, 0.85f);
+        Gizmos.color = new Color(0.1f, 0.9f, 0.3f, 0.35f);
+        Gizmos.matrix = holdPoint.localToWorldMatrix;
+        Gizmos.DrawWireCube(Vector3.zero, jawPocketHalfExtents * 2f);
+        Gizmos.matrix = Matrix4x4.identity;
+        Gizmos.color = new Color(0.2f, 0.6f, 1f, 0.55f);
         Gizmos.DrawWireSphere(holdPoint.position, graspRadius);
     }
 }

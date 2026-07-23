@@ -11,7 +11,7 @@ using UnityEngine;
 /// </summary>
 public static class ClawGraspSelfTest
 {
-    private const string ScenePath = "Assets/Scenes/P2_DigitalTwin.unity";
+    private const string ScenePath = "Assets/Scenes/P3_DigitalTwin_FixedArm.unity";
     private const string ReportPath = "Logs/claw_grasp_self_test.txt";
     private const float BallDiameter = 0.05f;
     private const float BallRadius = BallDiameter * 0.5f;
@@ -66,6 +66,17 @@ public static class ClawGraspSelfTest
         Log($"graspRadius={graspRadius:F3} ballRadius={BallRadius:F3}");
         Log($"limits S1=[{arm.S1MinimumAngle:F0},{arm.S1MaximumAngle:F0}] " +
             $"S2=[{arm.S2MinimumAngle:F0},{arm.S2MaximumAngle:F0}]");
+
+        // Geometric hold-point sweep: temporarily allow grab without IR so we
+        // can validate jaw pocket geometry independently of sensor noise.
+        var gripperSo = new SerializedObject(gripper);
+        var requireIr = gripperSo.FindProperty("requireGripperIrForGrab");
+        bool previousRequireIr = requireIr != null && requireIr.boolValue;
+        if (requireIr != null)
+        {
+            requireIr.boolValue = false;
+            gripperSo.ApplyModifiedPropertiesWithoutUndo();
+        }
 
         // Candidate poses: current defaults + sweep around floor-reachable set.
         var candidates = new List<(float s1, float s2, float s3, string name)>
@@ -123,10 +134,14 @@ public static class ClawGraspSelfTest
             float dist = Vector3.Distance(hold.position, ball.transform.position);
             bool overlap = dist <= graspRadius + BallRadius + 1e-4f;
 
-            // Close jaws past grab threshold and try logical grab.
+            // Proper open→close cycle (grab is edge-triggered).
+            arm.SetJawOpen();
+            Physics.SyncTransforms();
+            gripper.EvaluateNow();
             arm.SetJawClosed();
             Physics.SyncTransforms();
-            bool grabbed = gripper.TryGrabDetectedBall();
+            gripper.EvaluateNow();
+            bool grabbed = gripper.IsHolding;
 
             Vector3 fwd = hold.forward;
             float pitch = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg;
@@ -200,6 +215,12 @@ public static class ClawGraspSelfTest
 
         WriteReport(lines);
         // Discard pose mutations from the sweep.
+        if (requireIr != null)
+        {
+            requireIr.boolValue = previousRequireIr;
+            gripperSo.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
 
         return grabHits > 0 ? 0 : 1;

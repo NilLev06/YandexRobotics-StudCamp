@@ -9,6 +9,8 @@ public class SimulatedYoloCamera : MonoBehaviour
     [Header("Camera Settings")]
     public float maxDetectionDistance = 2.0f;
     public float horizontalFOV = 40.0f;
+    [Tooltip("Vertical FOV used for visibility checks. 0 = derive from the Unity camera.")]
+    public float verticalFOV = 0f;
     public LayerMask obstacleLayers;
 
     [Header("Domain randomization (imperfect vision)")]
@@ -22,6 +24,7 @@ public class SimulatedYoloCamera : MonoBehaviour
     [Header("Outputs (Read Only)")]
     [SerializeField] private bool isBallVisible;
     [SerializeField] private float relativeAngleX;
+    [SerializeField] private float relativeAngleY;
     [SerializeField] private float normalizedDistance;
 
     private Camera robotCamera;
@@ -33,7 +36,9 @@ public class SimulatedYoloCamera : MonoBehaviour
 
     public bool IsBallVisible => isBallVisible;
     public float RelativeAngleX => relativeAngleX;
+    public float RelativeAngleY => relativeAngleY;
     public float NormalizedDistance => normalizedDistance;
+    public string DebugLastRejectReason { get; private set; } = "none";
 
     void Awake()
     {
@@ -69,31 +74,59 @@ public class SimulatedYoloCamera : MonoBehaviour
     {
         if (targetBall == null)
         {
+            DebugLastRejectReason = "no_target";
             ResetDetection();
             return;
         }
 
-        EvaluateBallVisibility();
+        EvaluateBallVisibility(applyNoise: true);
     }
 
-    private void EvaluateBallVisibility()
+    /// <summary>
+    /// Geometry-only visibility (no miss-roll / noise). Used for spawn layout.
+    /// </summary>
+    public bool IsTargetGeometricallyVisible(Transform target)
+    {
+        if (target == null)
+            return false;
+
+        Transform previous = targetBall;
+        targetBall = target;
+        EvaluateBallVisibility(applyNoise: false);
+        bool visible = isBallVisible;
+        targetBall = previous;
+        if (previous != null)
+            EvaluateBallVisibility(applyNoise: true);
+        else
+            ResetDetection();
+        return visible;
+    }
+
+    private void EvaluateBallVisibility(bool applyNoise)
     {
         Vector3 directionToBall = targetBall.position - transform.position;
         float distance = directionToBall.magnitude;
-        float maxRange = maxDetectionDistance * episodeRangeScale;
+        float maxRange = maxDetectionDistance * (applyNoise ? episodeRangeScale : 1f);
 
         if (distance > maxRange)
         {
+            DebugLastRejectReason = $"too_far:{distance:F2}>{maxRange:F2}";
             ResetDetection();
             return;
         }
 
         Vector3 localDirection = transform.InverseTransformDirection(directionToBall);
-        float angleToBall = Mathf.Atan2(localDirection.x, localDirection.z) * Mathf.Rad2Deg;
-        float halfFov = 0.5f * horizontalFOV * episodeFovScale;
+        float horizontalDistance = new Vector2(localDirection.x, localDirection.z).magnitude;
+        float angleToBallX = Mathf.Atan2(localDirection.x, localDirection.z) * Mathf.Rad2Deg;
+        float angleToBallY = Mathf.Atan2(localDirection.y, horizontalDistance) * Mathf.Rad2Deg;
+        float fovScale = applyNoise ? episodeFovScale : 1f;
+        float halfFovX = 0.5f * horizontalFOV * fovScale;
+        float halfFovY = 0.5f * ResolveVerticalFovDegrees() * fovScale;
 
-        if (Mathf.Abs(angleToBall) > halfFov)
+        if (Mathf.Abs(angleToBallX) > halfFovX || Mathf.Abs(angleToBallY) > halfFovY)
         {
+            DebugLastRejectReason =
+                $"fov:x={angleToBallX:F1}/{halfFovX:F1} y={angleToBallY:F1}/{halfFovY:F1}";
             ResetDetection();
             return;
         }
@@ -102,30 +135,61 @@ public class SimulatedYoloCamera : MonoBehaviour
         {
             if (hit.transform != targetBall && !hit.transform.IsChildOf(targetBall))
             {
+                DebugLastRejectReason = $"occluded:{hit.collider.name}";
                 ResetDetection();
                 return;
             }
         }
 
-        if (enableDomainRandomization && Random.value < episodeMissChance)
+        if (applyNoise && enableDomainRandomization && Random.value < episodeMissChance)
         {
+            DebugLastRejectReason = "miss_roll";
             ResetDetection();
             return;
         }
 
         isBallVisible = true;
-        Vector3 viewportPoint = robotCamera.WorldToViewportPoint(targetBall.position);
-        float cleanAngle = (viewportPoint.x - 0.5f) * 2f;
+        DebugLastRejectReason = "visible";
+        if (robotCamera == null)
+            robotCamera = GetComponent<Camera>();
+
+        Vector3 viewportPoint = robotCamera != null
+            ? robotCamera.WorldToViewportPoint(targetBall.position)
+            : new Vector3(0.5f, 0.5f, distance);
+        float cleanAngleX = (viewportPoint.x - 0.5f) * 2f;
+        float cleanAngleY = (viewportPoint.y - 0.5f) * 2f;
         float cleanDistance = Mathf.Clamp01(distance / maxDetectionDistance);
 
-        relativeAngleX = Mathf.Clamp(cleanAngle + episodeAngleBias + SampleGaussian(0f, angleNoiseStd * 0.35f), -1.5f, 1.5f);
-        normalizedDistance = Mathf.Clamp01(cleanDistance + episodeDistanceBias + SampleGaussian(0f, distanceNoiseStd * 0.35f));
+        if (applyNoise)
+        {
+            relativeAngleX = Mathf.Clamp(cleanAngleX + episodeAngleBias + SampleGaussian(0f, angleNoiseStd * 0.35f), -1.5f, 1.5f);
+            relativeAngleY = Mathf.Clamp(cleanAngleY + SampleGaussian(0f, angleNoiseStd * 0.25f), -1.5f, 1.5f);
+            normalizedDistance = Mathf.Clamp01(cleanDistance + episodeDistanceBias + SampleGaussian(0f, distanceNoiseStd * 0.35f));
+        }
+        else
+        {
+            relativeAngleX = Mathf.Clamp(cleanAngleX, -1.5f, 1.5f);
+            relativeAngleY = Mathf.Clamp(cleanAngleY, -1.5f, 1.5f);
+            normalizedDistance = cleanDistance;
+        }
+    }
+
+    private float ResolveVerticalFovDegrees()
+    {
+        if (verticalFOV > 1f)
+            return verticalFOV;
+
+        if (robotCamera == null)
+            robotCamera = GetComponent<Camera>();
+
+        return robotCamera != null ? robotCamera.fieldOfView : horizontalFOV * 0.75f;
     }
 
     private void ResetDetection()
     {
         isBallVisible = false;
         relativeAngleX = 0f;
+        relativeAngleY = 0f;
         normalizedDistance = 1f;
     }
 

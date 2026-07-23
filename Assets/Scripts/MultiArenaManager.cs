@@ -45,7 +45,7 @@ public sealed class MultiArenaManager : MonoBehaviour
         arenas.Clear();
 
         if (templateArena == null)
-            templateArena = FindFirstObjectByType<TrainingArena>();
+            templateArena = FindAnyObjectByType<TrainingArena>();
 
         if (templateArena == null)
         {
@@ -76,10 +76,26 @@ public sealed class MultiArenaManager : MonoBehaviour
         if (hideTemplateAfterClone && clonesNeeded > 0)
             templateArena.gameObject.SetActive(false);
 
+        for (int i = 0; i < arenas.Count; i++)
+            RewireArenaAgents(arenas[i]);
+
+        if (arenaCount == 1 && arenas.Count > 0)
+            arenas[0].ResetEpisodeLayout();
+
         Debug.Log(
             $"MultiArenaManager: {arenas.Count} arenas " +
             $"({columns} x {(arenaCount + columns - 1) / columns}, " +
             $"spacing {spacing.x}x{spacing.y} m).");
+    }
+
+    private static void RewireArenaAgents(TrainingArena arena)
+    {
+        if (arena == null)
+            return;
+
+        RobotBrain[] agents = arena.GetComponentsInChildren<RobotBrain>(true);
+        for (int i = 0; i < agents.Length; i++)
+            agents[i].BindTrainingArena(arena);
     }
 
     private Vector3 GridOffset(Vector3 origin, int index)
