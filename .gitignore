@@ -1,0 +1,35 @@
+.DS_Store
+**/.DS_Store
+
+# Unity-generated state
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+**/MemoryCaptures/
+**/Assets/ML-Agents/Timers/
+**/.vscode/
+*.csproj
+*.sln
+*.slnx
+
+# Python/runtime state
+**/__pycache__/
+*.py[cod]
+*.log
+*.pid
+.venv/
+.pytest_cache/
+
+# Physical robot state must remain local
+amir-proj/RealRobot/pi/gfsx_servo_state.json
+
+# Training/intermediate artifacts
+**/results/
+**/runs/
+**/checkpoints/
+*.pt
+*.pth

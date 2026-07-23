@@ -1,0 +1,393 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!29 &1
+OcclusionCullingSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_OcclusionBakeSettings:
+    smallestOccluder: 5
+    smallestHole: 0.25
+    backfaceThreshold: 100
+  m_SceneGUID: 00000000000000000000000000000000
+  m_OcclusionCullingData: {fileID: 0}
+--- !u!104 &2
+RenderSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 10
+  m_Fog: 0
+  m_FogColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  m_FogMode: 3
+  m_FogDensity: 0.01
+  m_LinearFogStart: 0
+  m_LinearFogEnd: 300
+  m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
+  m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
+  m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
+  m_AmbientIntensity: 1
+  m_AmbientMode: 0
+  m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
+  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_HaloStrength: 0.5
+  m_FlareStrength: 1
+  m_FlareFadeSpeed: 3
+  m_HaloTexture: {fileID: 0}
+  m_SpotCookie: {fileID: 10001, guid: 0000000000000000e000000000000000, type: 0}
+  m_DefaultReflectionMode: 0
+  m_DefaultReflectionResolution: 128
+  m_ReflectionBounces: 1
+  m_ReflectionIntensity: 1
+  m_CustomReflection: {fileID: 0}
+  m_Sun: {fileID: 0}
+  m_UseRadianceAmbientProbe: 0
+--- !u!157 &3
+LightmapSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 13
+  m_BakeOnSceneLoad: 0
+  m_GISettings:
+    serializedVersion: 2
+    m_BounceScale: 1
+    m_IndirectOutputScale: 1
+    m_AlbedoBoost: 1
+    m_EnvironmentLightingMode: 0
+    m_EnableBakedLightmaps: 1
+    m_EnableRealtimeLightmaps: 0
+  m_LightmapEditorSettings:
+    serializedVersion: 12
+    m_Resolution: 2
+    m_BakeResolution: 40
+    m_AtlasSize: 1024
+    m_AO: 0
+    m_AOMaxDistance: 1
+    m_CompAOExponent: 1
+    m_CompAOExponentDirect: 0
+    m_ExtractAmbientOcclusion: 0
+    m_Padding: 2
+    m_LightmapParameters: {fileID: 0}
+    m_LightmapsBakeMode: 1
+    m_TextureCompression: 1
+    m_ReflectionCompression: 2
+    m_MixedBakeMode: 2
+    m_BakeBackend: 1
+    m_PVRSampling: 1
+    m_PVRDirectSampleCount: 32
+    m_PVRSampleCount: 512
+    m_PVRBounces: 2
+    m_PVREnvironmentSampleCount: 256
+    m_PVREnvironmentReferencePointCount: 2048
+    m_PVRFilteringMode: 1
+    m_PVRDenoiserTypeDirect: 1
+    m_PVRDenoiserTypeIndirect: 1
+    m_PVRDenoiserTypeAO: 1
+    m_PVRFilterTypeDirect: 0
+    m_PVRFilterTypeIndirect: 0
+    m_PVRFilterTypeAO: 0
+    m_PVREnvironmentMIS: 1
+    m_PVRCulling: 1
+    m_PVRFilteringGaussRadiusDirect: 1
+    m_PVRFilteringGaussRadiusIndirect: 1
+    m_PVRFilteringGaussRadiusAO: 1
+    m_PVRFilteringAtrousPositionSigmaDirect: 0.5
+    m_PVRFilteringAtrousPositionSigmaIndirect: 2
+    m_PVRFilteringAtrousPositionSigmaAO: 1
+    m_ExportTrainingData: 0
+    m_TrainingDataDestination: TrainingData
+    m_LightProbeSampleCountMultiplier: 4
+  m_LightingDataAsset: {fileID: 20201, guid: 0000000000000000f000000000000000, type: 0}
+  m_LightingSettings: {fileID: 0}
+--- !u!196 &4
+NavMeshSettings:
+  serializedVersion: 2
+  m_ObjectHideFlags: 0
+  m_BuildSettings:
+    serializedVersion: 3
+    agentTypeID: 0
+    agentRadius: 0.5
+    agentHeight: 2
+    agentSlope: 45
+    agentClimb: 0.4
+    ledgeDropHeight: 0
+    maxJumpAcrossDistance: 0
+    minRegionArea: 2
+    manualCellSize: 0
+    cellSize: 0.16666667
+    manualTileSize: 0
+    tileSize: 256
+    buildHeightMesh: 0
+    maxJobWorkers: 0
+    preserveTilesOutsideBounds: 0
+    debug:
+      m_Flags: 0
+  m_NavMeshData: {fileID: 0}
+--- !u!1 &1841452883
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1841452892}
+  - component: {fileID: 1841452891}
+  - component: {fileID: 1841452890}
+  - component: {fileID: 1841452889}
+  - component: {fileID: 1841452888}
+  - component: {fileID: 1841452887}
+  - component: {fileID: 1841452886}
+  - component: {fileID: 1841452885}
+  - component: {fileID: 1841452884}
+  m_Layer: 0
+  m_Name: GFS-X Fixed Physical Agent (LIVE)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1841452884
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d63f25de7028a4f0ea9af0802e0741e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  brain: {fileID: 1841452886}
+  behavior: {fileID: 1841452887}
+  requester: {fileID: 1841452885}
+  telemetry: {fileID: 1841452891}
+  vision: {fileID: 1841452890}
+  router: {fileID: 1841452889}
+  observations: {fileID: 1841452888}
+  lastReport: 'READY FOR GFSX_BRAIN_FIXED PHYSICAL LIVE INFERENCE.
+
+    WARNINGS:
+
+    -
+    The robot has no wheel encoders or IMU; observations 10-13 use motor-PWM dead
+    reckoning rather than measured world pose.
+
+    - The supplied 15,008,000-step
+    Fixed model recorded zero catches and never observed holding=1. Treat it as an
+    experimental search/drive policy, not a validated grasp policy.
+
+    - Every
+    Play session starts disarmed. F6 arms fixed S1-S3/S6, F8 arms S5, F7 arms S4,
+    and F9 arms tracks; each requires two presses. F10/Backspace stops everything.'
+  readyForFixedLiveInference: 1
+--- !u!114 &1841452885
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a5c9d521e5ef4759a8246a07d52221e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  DecisionPeriod: 5
+  DecisionStep: 0
+  TakeActionsBetweenDecisions: 1
+--- !u!114 &1841452886
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eccfa4b95781f495aa2462b6fa1576d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  agentParameters:
+    maxStep: 0
+  hasUpgradedFromAgentParameters: 1
+  MaxStep: 0
+  observations: {fileID: 1841452888}
+  actionRouter: {fileID: 1841452889}
+  latestGas: 0
+  latestSteering: 0
+  latestCameraPan: 0
+  latestRawClawCommand: 0
+  latestRoutedClawCommand: 0
+  actionCount: 0
+  blockedEmptyCloseCount: 0
+  automaticIrCloseCount: 0
+--- !u!114 &1841452887
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d1c4e0b1822b495aa52bc52839ecb30, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_BrainParameters:
+    VectorObservationSize: 15
+    NumStackedVectorObservations: 4
+    m_ActionSpec:
+      m_NumContinuousActions: 3
+      BranchSizes: 03000000
+    VectorActionSize: 
+    VectorActionDescriptions:
+    - Physical gas (+ forward; capped by router)
+    - Physical steering (+ right; differential tracks)
+    - Physical S5 pan velocity (+ visual right; reversed servo degrees)
+    - 'Physical S4: 0 preserve / 1 IR-gated close / 2 open'
+    VectorActionSpaceType: 0
+    hasUpgradedBrainParametersWithActionSpec: 1
+  m_Model: {fileID: 5022602860645237092, guid: 706c053983e144e6fa82331b4fd753b8, type: 3}
+  m_InferenceDevice: 0
+  m_BehaviorType: 2
+  m_BehaviorName: GFSX_Brain_Fixed
+  TeamId: 0
+  m_UseChildSensors: 0
+  m_UseChildActuators: 0
+  m_DeterministicInference: 1
+  m_ObservableAttributeHandling: 0
+--- !u!114 &1841452888
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 817785dc2b2134095a5ca856475592bc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  telemetry: {fileID: 1841452891}
+  vision: {fileID: 1841452890}
+  actionRouter: {fileID: 1841452889}
+  sensorPanBindDegrees: 90
+  sensorPanVisualDirection: -1
+  sensorPanRelativeRangeDegrees: 75
+  lastKnownBallDirection: 0
+  lastKnownBallAngle: 0
+  lastKnownBallDistance: 1
+  ballMemoryConfidence: 0
+  timeSinceLastDetection: 0
+  hasBallSightMemory: 0
+--- !u!114 &1841452889
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 687e0d723e3924f98850360d1b0eca7d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  telemetry: {fileID: 1841452891}
+  vision: {fileID: 1841452890}
+  allowDriveArming: 1
+  suppressAllPhysicalPublishing: 0
+  allowCameraPanServo: 1
+  allowClawServoActions: 1
+  allowFixedArmPose: 1
+  requireFixedArmPoseBeforeDrive: 1
+  publishRateHz: 8
+  actionTimeoutSeconds: 0.45
+  moveSpeed: 0.57
+  turnSpeedDegrees: 120
+  turnContribution: 0.3
+  maximumLinearCommand: 0.12
+  pwmPerMetrePerSecond: 200
+  motorDeadZone: 10
+  minimumMovingPwm: 35
+  maximumPwmStep: 15
+  maximumTrackPwm: 35
+  forwardStopDistanceMetres: 0.12
+  stopForwardOnFrontIr: 1
+  requireFreshRearIrForReverse: 1
+  sensorPanMinimumDegrees: 15
+  sensorPanMaximumDegrees: 160
+  sensorPanDegreesPerSecond: 60
+  sensorPanActionDirection: -1
+  clawOpenDegrees: 0
+  clawClosedDegrees: 50
+  clawCommandCooldownSeconds: 0.5
+  fixedArmS1Degrees: 70
+  fixedArmS2Degrees: 180
+  fixedArmS3Degrees: 90
+  fixedCameraTiltDegrees: 75
+  fixedArmToleranceDegrees: 1
+  driveArmed: 0
+  cameraServosRequested: 0
+  cameraServosArmed: 0
+  clawServoRequested: 0
+  clawServoArmed: 0
+  fixedArmPoseRequested: 0
+  fixedArmPoseArmed: 0
+  fixedArmPoseAtTarget: 0
+  safetyStatus: 'DRY RUN: model decisions are visible; all real outputs are DISARMED.'
+--- !u!114 &1841452890
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cbc04182d478e4de1b29d3131581350f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  udpPort: 5005
+  staleAfterSeconds: 1
+  minimumConfidence: 0.35
+--- !u!114 &1841452891
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8fac81a03e989464fa0f19db2e6ce9f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rosIpAddress: 192.168.2.152
+  rosPort: 10000
+  sensorTimeoutSeconds: 1
+  motorPwmTimeoutSeconds: 0.75
+  servoTimeoutSeconds: 2
+  ultrasonicRangeMetres: 3.43
+  sensorPanMinimumDegrees: 15
+  sensorPanMaximumDegrees: 160
+  pwmPerMetrePerSecond: 200
+  turnTrackContribution: 0.3
+  simulatedMaximumYawRateDegrees: 120
+--- !u!4 &1841452892
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1841452883}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1660057539 &9223372036854775807
+SceneRoots:
+  m_ObjectHideFlags: 0
+  m_Roots:
+  - {fileID: 1841452892}

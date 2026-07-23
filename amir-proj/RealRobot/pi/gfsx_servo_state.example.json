@@ -1,0 +1,11 @@
+{
+  "_comment": "Replace these commanded-angle estimates with the robot's current physical pose before first launch. This is not encoder feedback.",
+  "angles": [
+    30.0,
+    160.0,
+    97.0,
+    50.0,
+    67.0,
+    89.0
+  ]
+}
