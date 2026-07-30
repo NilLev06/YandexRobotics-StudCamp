@@ -17,14 +17,32 @@ public static class VisualValidationSetup
     private const string RobotPrefabPath = "Assets/Prefabs/GFSX_Robot.prefab";
     private const string ValidationModelsDir = "Assets/Models/Validation";
     private const string RobotObjectName = "GFS-X Robot";
-    private const string DefaultRunId = "fixed_arm_30m_relay_x4";
+    private const string DefaultRunId = "fixed_arm_20m_relayinit_x6";
     private const string OnnxFileName = "GFSX_Brain_Fixed.onnx";
 
-    [MenuItem("GFS-X/Visual Validation/Fixed Arm (fixed_arm_30m_relay_x4)")]
+    [MenuItem("GFS-X/Visual Validation/Fixed Arm (fixed_arm_20m_relayinit_x6)")]
     [MenuItem("GFS-X/Validate Fixed Arm Now", false, 10)]
-    public static void SetupFixedArm30mRelay()
+    public static void SetupFixedArm20mRelayInit()
     {
         Setup(FixedScenePath, DefaultRunId, OnnxFileName, showDialog: true);
+    }
+
+    [MenuItem("GFS-X/Visual Validation/Fixed Arm (fixed_arm_30m_catchfix_x6)")]
+    public static void SetupFixedArm30mCatchFix()
+    {
+        Setup(FixedScenePath, "fixed_arm_30m_catchfix_x6", OnnxFileName, showDialog: true);
+    }
+
+    [MenuItem("GFS-X/Visual Validation/Fixed Arm (fixed_arm_50m_cam_x6)")]
+    public static void SetupFixedArm50mCam()
+    {
+        Setup(FixedScenePath, "fixed_arm_50m_cam_x6", OnnxFileName, showDialog: true);
+    }
+
+    [MenuItem("GFS-X/Visual Validation/Fixed Arm (fixed_arm_30m_relay_x4)")]
+    public static void SetupFixedArm30mRelay()
+    {
+        Setup(FixedScenePath, "fixed_arm_30m_relay_x4", OnnxFileName, showDialog: true);
     }
 
     [MenuItem("GFS-X/Visual Validation/Fixed Arm (fixed_arm_10m_relay_x4)")]

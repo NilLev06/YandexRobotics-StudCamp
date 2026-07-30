@@ -5,9 +5,9 @@ using Unity.MLAgents.Sensors;
 using UnityEngine;
 
 /// <summary>
-/// FixedArm agent for StudCamp Stage 2 (relay):
-/// drive + camera pan, fixed claw, approach ball zone → grasp → return to start.
-/// Rewards scaled to the competition scoring table.
+/// FixedArm Stage-2 relay: drive + pan camera (tilt locked like best catch runs),
+/// fixed claw, seek → grasp (hold-lock) → return ball to red home cube.
+/// Obs/action space matches fixed_arm_30m_relay_x4 for weight transfer.
 /// </summary>
 public class RobotBrain : Agent
 {
@@ -32,39 +32,49 @@ public class RobotBrain : Agent
     [SerializeField] private GfsxSensorHeadRigController sensorHeadRig;
     [SerializeField] private TrainingArena trainingArena;
 
-    [Header("Reward Settings (Stage 2 scaled)")]
-    [SerializeField] private float timePenalty = -0.0005f;
-    [Tooltip("Small look bonus; keep low so agent does not farm sight from afar.")]
-    [SerializeField] private float ballInSightReward = 0.001f;
-    [Tooltip("Base multiplier for closing distance to the ball.")]
-    [SerializeField] private float approachRewardScale = 2.0f;
-    [Tooltip("Extra approach boost when already close (anti fear of final metres).")]
-    [SerializeField] private float closeApproachBoost = 3.0f;
-    [Tooltip("Distance to ball that counts as ball-zone entry (tape zone).")]
+    [Header("Reward Settings (catch-weighted)")]
+    [SerializeField] private float timePenalty = -0.0008f;
+    [SerializeField] private float ballInSightReward = 0.0004f;
+    [SerializeField] private float approachRewardScale = 0.7f;
+    [SerializeField] private float closeApproachBoost = 1.2f;
     [SerializeField, Min(0.1f)] private float ballZoneRadius = 0.45f;
-    [Tooltip("Maps to +15 for entering the ball zone.")]
-    [SerializeField] private float ballZoneReward = 1.5f;
-    [Tooltip("Maps to +20 for grasp.")]
-    [SerializeField] private float catchSuccessReward = 2.0f;
-    [Tooltip("Maps to +15 for returning to the red home cube.")]
-    [SerializeField] private float returnZoneReward = 1.5f;
-    [Tooltip("Maps to +15 for finishing while still holding the ball.")]
-    [SerializeField] private float returnWithBallReward = 1.5f;
-    [Tooltip("Maps to -3 collision; deducted from zone bonuses, floored at 0.")]
+    [SerializeField] private float ballZoneReward = 1.0f;
+    [Tooltip("Must dominate dense shaping — otherwise the policy farms approach without grasping.")]
+    [SerializeField] private float catchSuccessReward = 15.0f;
+    [SerializeField] private float returnZoneReward = 3.0f;
+    [SerializeField] private float returnWithBallReward = 5.0f;
     [SerializeField] private float collisionPenalty = 0.3f;
     [SerializeField, Min(0)] private int maxCollisionPenaltiesPerPhase = 5;
-    [SerializeField, Min(0.05f)] private float homeZoneRadius = 0.55f;
-    [SerializeField] private float returnApproachScale = 1.5f;
+    [SerializeField, Min(0.05f)] private float homeZoneRadius = 0.4f;
+    [SerializeField] private float returnApproachScale = 1.0f;
+    [Tooltip("Centering help near the ball; keep small vs catch reward.")]
+    [SerializeField] private float centerAlignReward = 0.003f;
+    [Tooltip("Steps the ball must stay held before Return phase starts.")]
+    [SerializeField, Min(1)] private int holdConfirmSteps = 10;
+    [SerializeField] private float lingerInZoneWithoutGrabPenalty = -0.004f;
+    [SerializeField] private float gripperIrAlignReward = 0.02f;
+    [SerializeField] private float missCatchTimeoutPenalty = -4.0f;
 
     [Header("Gripper Assistance")]
     [SerializeField] private bool autoCloseGripperOnBallDetect = true;
+    [Tooltip("While holding, ignore Open actions and keep jaws locked.")]
+    [SerializeField] private bool lockJawClosedWhileHolding = true;
 
-    [Header("Camera head")]
-    [Tooltip("Episode start tilt (S6). Agent controls pan (S5) only.")]
+    [Header("Camera head (from best catch models: pan-only, fixed tilt)")]
+    [Tooltip("Locked S6 tilt. Best catch runs used −15°.")]
     [SerializeField] private float episodeCameraTiltDegrees = -15f;
+    [SerializeField] private float cameraPanDegreesPerSecond = 60f;
+    [SerializeField, Range(0f, 0.4f)] private float cameraCommandDeadzone = 0.12f;
+
+    [Header("Ball sight memory & camera search")]
+    [SerializeField] private bool enableBallSearchAssist = true;
+    [SerializeField, Range(1f, 2f)] private float searchCameraSpeedMultiplier = 1.45f;
+    [SerializeField, Range(0f, 0.5f)] private float searchAssistStrength = 0.28f;
+    [SerializeField, Min(0.5f)] private float ballMemoryDecaySeconds = 4f;
+    [SerializeField] private float searchPanReward = 0.002f;
 
     [Header("Episode limits")]
-    [SerializeField, Min(0)] private int maxEpisodeSteps = 6000;
+    [SerializeField, Min(0)] private int maxEpisodeSteps = 5000;
     [SerializeField] private float episodeTimeoutPenalty = -1.0f;
 
     private Rigidbody body;
@@ -82,6 +92,7 @@ public class RobotBrain : Agent
     private int seekCollisions;
     private int returnCollisions;
     private bool obstacleLatched;
+    private int holdStreak;
 
     public RobotTrainingMode TrainingMode => trainingMode;
     public int ExpectedContinuousActions => ContinuousActionCount;
@@ -109,6 +120,7 @@ public class RobotBrain : Agent
         if (armRig != null) armRig.KeyboardControlEnabled = false;
 
         trainingMode = RobotTrainingMode.FixedArm;
+        EnsureBehaviorSpace();
         EnsureTrainingBehaviorWhenCommunicatorOn();
     }
 
@@ -126,6 +138,7 @@ public class RobotBrain : Agent
         seekCollisions = 0;
         returnCollisions = 0;
         obstacleLatched = false;
+        holdStreak = 0;
 
         if (trackController != null) trackController.Stop(immediate: true);
 
@@ -150,7 +163,6 @@ public class RobotBrain : Agent
 
         Physics.SyncTransforms();
 
-        // Re-capture start after arena reset (spawn may have moved).
         startPosition = body != null ? body.position : transform.position;
         startRotation = body != null ? body.rotation : transform.rotation;
 
@@ -158,13 +170,6 @@ public class RobotBrain : Agent
         timeSinceLastDetection = 0f;
         previousDistanceToBall = float.MaxValue;
         previousDistanceToHome = float.MaxValue;
-    }
-
-    private Vector3 GetHomeTarget()
-    {
-        if (trainingArena != null)
-            return trainingArena.ReturnTargetWorld;
-        return startPosition;
     }
 
     private void ResetCameraHeadForEpisode()
@@ -180,6 +185,19 @@ public class RobotBrain : Agent
     public void BindTrainingArena(TrainingArena arena)
     {
         trainingArena = arena;
+    }
+
+    private void EnsureBehaviorSpace()
+    {
+        BehaviorParameters behavior = GetComponent<BehaviorParameters>();
+        if (behavior == null)
+            return;
+
+        behavior.BrainParameters.VectorObservationSize = VectorObservationCount;
+        behavior.BrainParameters.NumStackedVectorObservations = Mathf.Max(
+            4,
+            behavior.BrainParameters.NumStackedVectorObservations);
+        behavior.BrainParameters.ActionSpec = new ActionSpec(ContinuousActionCount, new[] { 3 });
     }
 
     private void EnsureTrainingBehaviorWhenCommunicatorOn()
@@ -222,6 +240,30 @@ public class RobotBrain : Agent
         startRotation = worldRotation;
     }
 
+    private Vector3 GetHomeTarget()
+    {
+        if (trainingArena != null)
+            return trainingArena.ReturnTargetWorld;
+        return startPosition;
+    }
+
+    private float LockedTiltDegrees()
+    {
+        if (sensorHeadRig == null)
+            return episodeCameraTiltDegrees;
+        return Mathf.Clamp(
+            episodeCameraTiltDegrees,
+            sensorHeadRig.S6MinimumAngle,
+            sensorHeadRig.S6MaximumAngle);
+    }
+
+    private float BallMemoryConfidence()
+    {
+        if (ballMemoryDecaySeconds <= 0.001f)
+            return 0f;
+        return 1f - Mathf.Clamp01(timeSinceLastDetection / ballMemoryDecaySeconds);
+    }
+
     public override void CollectObservations(VectorSensor sensor)
     {
         if (yoloCamera != null)
@@ -252,6 +294,7 @@ public class RobotBrain : Agent
         float currentSpeed = trackController != null ? trackController.LinearSpeed : 0f;
         bool isHoldingBall = gripperController != null && gripperController.IsHolding;
 
+        // Match relay obs layout exactly (15): pan normalize by S5 max.
         float currentServoNormalize = 0f;
         if (sensorHeadRig != null && sensorHeadRig.S5MaximumAngle > 0.001f)
             currentServoNormalize = sensorHeadRig.S5PanAngle / sensorHeadRig.S5MaximumAngle;
@@ -278,38 +321,55 @@ public class RobotBrain : Agent
         if (maxEpisodeSteps > 0 && StepCount >= maxEpisodeSteps)
         {
             AddReward(episodeTimeoutPenalty);
+            if (!episodeEndedInCatch)
+                AddReward(missCatchTimeoutPenalty);
             EndEpisode();
             return;
         }
 
         float moveCmd = actions.ContinuousActions[0];
         float turnCmd = actions.ContinuousActions[1];
-        float servoPanCmd = actions.ContinuousActions[2];
+        float servoPanCmd = ApplyDeadzone(actions.ContinuousActions[2], cameraCommandDeadzone);
+
+        bool searching =
+            enableBallSearchAssist &&
+            yoloCamera != null &&
+            !yoloCamera.IsBallVisible &&
+            BallMemoryConfidence() > 0.05f &&
+            Mathf.Abs(lastKnownBallDirection) > 0.01f;
+
+        if (searching)
+        {
+            servoPanCmd = Mathf.Clamp(
+                servoPanCmd + searchAssistStrength * lastKnownBallDirection,
+                -1f,
+                1f);
+            if (Mathf.Sign(servoPanCmd) == Mathf.Sign(lastKnownBallDirection) &&
+                Mathf.Abs(servoPanCmd) > 0.05f)
+            {
+                AddReward(searchPanReward * BallMemoryConfidence());
+            }
+        }
 
         if (trackController != null)
             trackController.SetCommand(moveCmd, turnCmd);
 
         if (sensorHeadRig != null)
         {
-            const float degreesPerSecond = 60f;
+            float panSpeed = cameraPanDegreesPerSecond;
+            if (searching)
+                panSpeed *= searchCameraSpeedMultiplier;
+
             float newPan = sensorHeadRig.S5PanAngle +
-                           (servoPanCmd * degreesPerSecond * Time.fixedDeltaTime);
-            newPan = Mathf.Clamp(
-                newPan,
-                sensorHeadRig.S5MinimumAngle,
-                sensorHeadRig.S5MaximumAngle);
-            sensorHeadRig.SetServoCommands(
-                newPan,
-                Mathf.Clamp(
-                    episodeCameraTiltDegrees,
-                    sensorHeadRig.S6MinimumAngle,
-                    sensorHeadRig.S6MaximumAngle));
+                           (servoPanCmd * panSpeed * Time.fixedDeltaTime);
+            newPan = Mathf.Clamp(newPan, sensorHeadRig.S5MinimumAngle, sensorHeadRig.S5MaximumAngle);
+            sensorHeadRig.SetServoCommands(newPan, LockedTiltDegrees());
         }
 
         if (armRig != null)
             armRig.SetFloorPickupPoseKeepingJaw();
 
-        ExecuteGripperAction(actions.DiscreteActions[0]);
+        ExecuteGripperAction(actions.DiscreteActions.Length > 0 ? actions.DiscreteActions[0] : 0);
         EvaluateRewards();
     }
 
@@ -332,22 +392,26 @@ public class RobotBrain : Agent
 
     private void EvaluateSeekRewards(Vector3 robotPosition, float distanceToBall)
     {
-        if (yoloCamera != null && yoloCamera.IsBallVisible)
+        bool holding = gripperController != null && gripperController.IsHolding;
+
+        if (!holding && yoloCamera != null && yoloCamera.IsBallVisible)
         {
-            // Prefer closing distance over staring from afar.
             float proximity = 1f - Mathf.Clamp01(yoloCamera.NormalizedDistance);
-            AddReward(ballInSightReward * (0.25f + 0.75f * proximity));
-            AddReward(0.004f * (1.0f - Mathf.Abs(yoloCamera.RelativeAngleX)) * proximity);
+            AddReward(ballInSightReward * (0.2f + 0.8f * proximity));
+
+            float center = 1f - Mathf.Clamp01(Mathf.Abs(yoloCamera.RelativeAngleX));
+            if (proximity > 0.35f)
+                AddReward(centerAlignReward * center * proximity);
         }
 
-        if (distanceToBall < float.MaxValue)
+        if (!holding && distanceToBall < float.MaxValue)
         {
             if (previousDistanceToBall < float.MaxValue)
             {
                 float distanceDelta = previousDistanceToBall - distanceToBall;
                 float closeness = 1f - Mathf.Clamp01(distanceToBall / 2.5f);
-                float scale = approachRewardScale * (1f + closeApproachBoost * closeness * closeness);
-                AddReward(distanceDelta * scale);
+                float scale = approachRewardScale * (1f + closeApproachBoost * closeness);
+                AddReward(Mathf.Clamp(distanceDelta * scale, -0.05f, 0.08f));
             }
 
             previousDistanceToBall = distanceToBall;
@@ -358,29 +422,56 @@ public class RobotBrain : Agent
                 float zonePay = Mathf.Max(0f, ballZoneReward - seekCollisions * collisionPenalty);
                 AddReward(zonePay);
             }
+
+            if (awardedBallZone && distanceToBall <= ballZoneRadius)
+                AddReward(lingerInZoneWithoutGrabPenalty);
         }
 
-        if (gripperController != null && gripperController.IsHolding)
+        if (!holding &&
+            virtualSensors != null &&
+            virtualSensors.GripperIrDetected &&
+            distanceToBall < 0.35f)
         {
+            AddReward(gripperIrAlignReward);
+        }
+
+        if (holding)
+        {
+            holdStreak++;
             episodeEndedInCatch = true;
-            AddReward(catchSuccessReward);
-            phase = EpisodePhase.Return;
-            previousDistanceToHome = Vector3.Distance(robotPosition, GetHomeTarget());
-            returnCollisions = 0;
-            obstacleLatched = false;
+            if (holdStreak >= holdConfirmSteps)
+            {
+                AddReward(catchSuccessReward);
+                phase = EpisodePhase.Return;
+                previousDistanceToHome = Vector3.Distance(robotPosition, GetHomeTarget());
+                returnCollisions = 0;
+                obstacleLatched = false;
+            }
+            else
+            {
+                AddReward(0.05f);
+            }
+        }
+        else
+        {
+            if (holdStreak > 0)
+                AddReward(-0.5f);
+            holdStreak = 0;
         }
     }
 
     private void EvaluateReturnRewards(Vector3 robotPosition)
     {
-        // Dropped the ball during return — soft fail, keep seeking again if still near.
         if (gripperController == null || !gripperController.IsHolding)
         {
-            AddReward(-0.5f);
+            AddReward(-0.6f);
             phase = EpisodePhase.Seek;
+            holdStreak = 0;
             previousDistanceToBall = float.MaxValue;
             return;
         }
+
+        AddReward(0.005f);
 
         Vector3 home = GetHomeTarget();
         float distanceToHome = Vector3.Distance(robotPosition, home);
@@ -407,7 +498,6 @@ public class RobotBrain : Agent
         if (virtualSensors == null)
             return;
 
-        // Near the ball / gripper IR: sensors often see the ball itself — do not scare the agent away.
         bool nearBall = false;
         if (yoloCamera != null && yoloCamera.targetBall != null)
         {
@@ -441,7 +531,6 @@ public class RobotBrain : Agent
             if (seekCollisions < maxCollisionPenaltiesPerPhase)
             {
                 seekCollisions++;
-                // Soft step cost; zone bonus already floors collision deductions.
                 AddReward(-0.02f);
             }
         }
@@ -454,7 +543,15 @@ public class RobotBrain : Agent
 
     private void ExecuteGripperAction(int command)
     {
-        if (armRig == null) return;
+        if (armRig == null)
+            return;
+
+        bool holding = gripperController != null && gripperController.IsHolding;
+        if (holding && lockJawClosedWhileHolding)
+        {
+            armRig.SetJawClosed();
+            return;
+        }
 
         if (ShouldAutoCloseGripper())
         {
@@ -489,12 +586,22 @@ public class RobotBrain : Agent
         return virtualSensors.GripperIrDetected;
     }
 
+    private static float ApplyDeadzone(float value, float deadzone)
+    {
+        float mag = Mathf.Abs(value);
+        if (mag <= deadzone)
+            return 0f;
+        float sign = Mathf.Sign(value);
+        return sign * ((mag - deadzone) / Mathf.Max(0.001f, 1f - deadzone));
+    }
+
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var continuousActions = actionsOut.ContinuousActions;
         var discreteActions = actionsOut.DiscreteActions;
         for (int index = 0; index < continuousActions.Length; index++)
             continuousActions[index] = 0f;
-        discreteActions[0] = 0;
+        if (discreteActions.Length > 0)
+            discreteActions[0] = 0;
     }
 }

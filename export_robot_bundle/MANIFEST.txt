@@ -1,0 +1,33 @@
+Exported from: /home/vladislavdauer/PycharmProjects/YandexRobotics-StudCamp
+Date: 2026-07-22T19:24:09+03:00
+Includes latest grasp edge-fix + floor clearance fixes.
+
+=== Scripts ===
+ArmContactTracker.cs
+CameraCoverageMap.cs
+GfsxArmRigController.cs
+GfsxSensorHeadRigController.cs
+GripperController.cs
+RobotBrain.cs
+RobotTrainingMode.cs
+SimulatedYoloCamera.cs
+TrackController.cs
+TrainingArena.cs
+TrainingGraspMetrics.cs
+VirtualSensors.cs
+
+=== Editor ===
+ClawFloorClearanceSelfTest.cs
+GfsxArmRigControllerEditor.cs
+GfsxSensorHeadRigControllerEditor.cs
+PhysicalGraspSelfTest.cs
+
+=== Scenes ===
+P2_DigitalTwin.unity
+P3_DigitalTwin_FixedArm.unity
+
+=== Prefabs ===
+GFS-X Robot - Full URP ML-Agents.prefab
+
+=== Models ===
+GFSX_Brain_Mobile_mobile_arm_headless_x4.onnx

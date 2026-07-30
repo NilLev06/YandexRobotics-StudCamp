@@ -159,7 +159,7 @@ MonoBehaviour:
   floorPickupS2: 10
   floorPickupS3: -90
   minTipClearanceMetres: 0.025
-  maxClearanceRaiseDegrees: 0
+  maxClearanceRaiseDegrees: 22
   floorRaycastLayers:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -302,7 +302,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 0
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 5022602860645237092, guid: 8c66810911d9bbeb3ab93316cbe0245f, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: 7814d942adcdcff9b83008a330ff0e15, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 2
   m_BehaviorName: GFSX_Brain_Fixed
@@ -350,36 +350,48 @@ MonoBehaviour:
   armRig: {fileID: 1065773074485337320}
   sensorHeadRig: {fileID: 7239145240825982016}
   trainingArena: {fileID: 0}
-  timePenalty: -0.0008
-  ballInSightReward: 0.0004
-  approachRewardScale: 0.7
-  closeApproachBoost: 1.2
-  ballZoneRadius: 0.45
-  ballZoneReward: 1
-  catchSuccessReward: 15
-  returnZoneReward: 3
-  returnWithBallReward: 5
-  collisionPenalty: 0.3
-  maxCollisionPenaltiesPerPhase: 5
-  homeZoneRadius: 0.55
-  returnApproachScale: 1.5
-  centerAlignReward: 0.003
-  holdConfirmSteps: 10
-  lingerInZoneWithoutGrabPenalty: -0.004
-  gripperIrAlignReward: 0.02
-  missCatchTimeoutPenalty: -4
+  enableDomainRandomization: 0
+  robotMassRange: {x: 1, y: 4}
+  actionLatencyMinSteps: 8
+  actionLatencyMaxSteps: 13
+  timePenalty: -0.001
+  ballInSightReward: 0.002
+  gripperIrReward: 0.025
+  emptyGripperClosePenalty: -0.35
+  holdStepReward: 0.025
+  holdSuccessReward: 18
+  holdSuccessSteps: 35
+  bodyTurnPenalty: -0.008
+  cameraPanReward: 0.01
+  bodyTurnWhileBallOffCenterPenalty: -0.022
+  spinInPlacePenalty: -0.035
+  spinInPlaceYawThreshold: 22
+  spinInPlaceSpeedThreshold: 0.05
+  bodyTurnWhileBallCenteredPenalty: -0.02
+  rushNearBallPenalty: -0.01
+  ballKickPenalty: -0.15
+  slowApproachReward: 0.008
+  closeApproachDistance: 0.7
+  distanceShapingScale: 0.4
+  obstacleProximityPenalty: -0.012
+  armWallContactPenalty: -0.02
+  armFloorContactPenalty: -0.08
+  reverseDrivePenalty: -0.018
+  reverseWhileBallVisiblePenalty: -0.028
+  episodeTimeoutPenalty: -2.5
   autoCloseGripperOnBallDetect: 1
-  lockJawClosedWhileHolding: 1
-  episodeCameraTiltDegrees: -15
-  cameraPanDegreesPerSecond: 60
-  cameraCommandDeadzone: 0.12
   enableBallSearchAssist: 1
-  searchCameraSpeedMultiplier: 1.45
-  searchAssistStrength: 0.28
-  ballMemoryDecaySeconds: 4
-  searchPanReward: 0.002
-  maxEpisodeSteps: 5000
-  episodeTimeoutPenalty: -1
+  searchCameraSpeedMultiplier: 1.7
+  searchAssistStrength: 0.3
+  ballMemoryDecaySeconds: 5
+  searchPanReward: 0.012
+  episodeCameraTiltDegrees: -15
+  lockCameraTiltDuringTraining: 1
+  cameraPanAtLimitPenalty: -0.01
+  cameraPanOscillationPenalty: -0.015
+  enableCoverageRewards: 1
+  coverageRevealReward: 0.0025
+  maxEpisodeSteps: 3500
 --- !u!1 &369712371723521221
 GameObject:
   m_ObjectHideFlags: 0

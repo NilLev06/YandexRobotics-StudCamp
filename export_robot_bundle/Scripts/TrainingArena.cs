@@ -15,7 +15,6 @@ public sealed class TrainingArena : MonoBehaviour
     [SerializeField] private SimulatedYoloCamera yoloCamera;
 
     [Header("Fixed playable area (local XZ, metres)")]
-    [Tooltip("X = long side (wall-to-wall), Z = short side.")]
     [SerializeField] private Vector2 halfExtents = new Vector2(2.8f, 2.0f);
     [SerializeField] private float ballHeight = 0.025f;
     [SerializeField] private float robotHeight = 0f;
@@ -30,26 +29,12 @@ public sealed class TrainingArena : MonoBehaviour
     [SerializeField] private bool randomizeRobotPose = true;
     [SerializeField] private float robotSpawnRadius = 0.7f;
     [SerializeField] private Vector2 robotYawRangeDegrees = new Vector2(-180f, 180f);
-    [Tooltip("Spawn at the start wall of the LONG side (local -X), facing +X.")]
-    [SerializeField] private bool relayStartEndSpawn = true;
-    [SerializeField] private float relayStartX = -2.35f;
-    [SerializeField] private float relayStartZJitter = 0.35f;
 
     [Header("Ball spawn (pose only)")]
-    [SerializeField] private float minBallDistanceFromRobot = 2.4f;
-    [SerializeField] private float maxBallDistanceFromRobot = 5.5f;
-    [SerializeField, Min(0.1f)] private float ballWallClearance = 0.4f;
-    [Tooltip("Ball at the opposite wall of the LONG side (local +X).")]
-    [SerializeField] private bool relayFarBallSpawn = true;
-    [SerializeField] private float relayBallX = 2.35f;
-    [SerializeField] private float relayBallZJitter = 0.85f;
-    [SerializeField] private bool requireBallOutsideInitialFov = true;
-
-    [Header("Return home (red cube, 5 cm)")]
-    [SerializeField] private Transform homeMarker;
-    [SerializeField] private Vector3 homeMarkerLocalScale = new Vector3(0.05f, 0.05f, 0.05f);
-    [SerializeField] private Color homeMarkerColor = new Color(0.92f, 0.12f, 0.12f, 1f);
-    [SerializeField] private float homeBesideRobotOffsetZ = 0.22f;
+    [SerializeField] private float minBallDistanceFromRobot = 0.7f;
+    [SerializeField] private float maxBallDistanceFromRobot = 2.4f;
+    [Tooltip("Minimum clearance from arena walls when placing the ball (metres).")]
+    [SerializeField, Min(0.1f)] private float ballWallClearance = 0.55f;
 
     [Header("Ball domain randomization")]
     [SerializeField] private bool randomizeBallPhysics = true;
@@ -60,8 +45,8 @@ public sealed class TrainingArena : MonoBehaviour
 
     [Header("Obstacles 0.36 x 0.24 x 0.14 m (± size tolerance)")]
     [SerializeField] private bool spawnObstacles = true;
-    [SerializeField] private int minObstacles = 8;
-    [SerializeField] private int maxObstacles = 8;
+    [SerializeField] private int minObstacles = 6;
+    [SerializeField] private int maxObstacles = 12;
     [SerializeField] private Vector3 obstacleSize = new Vector3(0.36f, 0.14f, 0.24f);
     [Tooltip("Per-edge manufacturing tolerance as a fraction of nominal size, e.g. 0.05 → ±5%.")]
     [SerializeField, Range(0f, 0.25f)] private float obstacleSizeTolerance = 0.08f;
@@ -81,15 +66,10 @@ public sealed class TrainingArena : MonoBehaviour
     private float baselineBallMass = 0.05f;
     private Material runtimeBallMaterial;
     private Material runtimeObstacleMaterial;
-    private Material runtimeHomeMaterial;
 
     public RobotBrain Agent => agent;
     public Transform TargetBall => targetBall;
-    public Transform HomeMarker => homeMarker;
     public Vector2 HalfExtents => halfExtents;
-
-    public Vector3 ReturnTargetWorld =>
-        homeMarker != null ? homeMarker.position : ArenaToWorld(new Vector3(relayStartX, 0f, 0f));
 
     private void Awake()
     {
@@ -125,14 +105,12 @@ public sealed class TrainingArena : MonoBehaviour
     {
         AutoWire();
         EnsureObstaclesRoot();
-        EnsureHomeMarker();
         EnforceFixedScales();
         ApplyBallAppearance();
 
         ClearObstacles();
         PlaceRobot();
-        PlaceHomeMarker();
-        PlaceBallOutsideInitialFov();
+        PlaceBall();
         EnforceFixedScales();
         ApplyBallPhysicsRandomization();
         if (spawnObstacles)
@@ -269,72 +247,6 @@ public sealed class TrainingArena : MonoBehaviour
         obstaclesRoot = root.transform;
     }
 
-    private void EnsureHomeMarker()
-    {
-        if (homeMarker != null)
-            return;
-
-        Transform existing = transform.Find("RedHomeCube");
-        if (existing != null)
-        {
-            homeMarker = existing;
-            return;
-        }
-
-        GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        cube.name = "RedHomeCube";
-        cube.transform.SetParent(transform, false);
-        cube.transform.localScale = homeMarkerLocalScale;
-        // Marker only — robot drives onto the zone; no physical blocking.
-        Collider col = cube.GetComponent<Collider>();
-        if (col != null)
-            col.isTrigger = true;
-        homeMarker = cube.transform;
-        ApplyHomeMarkerVisual(cube);
-    }
-
-    private void ApplyHomeMarkerVisual(GameObject cube)
-    {
-        var renderer = cube.GetComponent<MeshRenderer>();
-        if (renderer == null)
-            return;
-
-        if (runtimeHomeMaterial == null)
-        {
-            runtimeHomeMaterial = new Material(renderer.sharedMaterial != null
-                ? renderer.sharedMaterial
-                : new Material(Shader.Find("Universal Render Pipeline/Lit")));
-            runtimeHomeMaterial.name = "RedHomeCube_Runtime";
-        }
-
-        if (runtimeHomeMaterial.HasProperty("_BaseColor"))
-            runtimeHomeMaterial.SetColor("_BaseColor", homeMarkerColor);
-        if (runtimeHomeMaterial.HasProperty("_Color"))
-            runtimeHomeMaterial.SetColor("_Color", homeMarkerColor);
-        renderer.sharedMaterial = runtimeHomeMaterial;
-    }
-
-    private void PlaceHomeMarker()
-    {
-        EnsureHomeMarker();
-        if (homeMarker == null)
-            return;
-
-        float z = homeBesideRobotOffsetZ;
-        if (agent != null)
-        {
-            Vector3 robotLocal = transform.InverseTransformPoint(agent.transform.position);
-            z = robotLocal.z + homeBesideRobotOffsetZ;
-        }
-
-        Vector3 local = new Vector3(relayStartX - 0.12f, homeMarkerLocalScale.y * 0.5f, z);
-        homeMarker.SetPositionAndRotation(
-            ArenaToWorld(local),
-            ArenaToWorld(Quaternion.identity));
-        homeMarker.localScale = homeMarkerLocalScale;
-        ApplyHomeMarkerVisual(homeMarker.gameObject);
-    }
-
     private void PlaceRobot()
     {
         if (agent == null)
@@ -343,14 +255,7 @@ public sealed class TrainingArena : MonoBehaviour
         Vector3 localPos = robotLocalStart;
         Quaternion localRot = robotLocalStartRotation;
 
-        if (relayStartEndSpawn)
-        {
-            float z = Random.Range(-relayStartZJitter, relayStartZJitter);
-            localPos = new Vector3(relayStartX + 0.25f, robotHeight, z);
-            // Face along +X (long side, wall → wall).
-            localRot = Quaternion.Euler(0f, 90f, 0f);
-        }
-        else if (randomizeRobotPose)
+        if (randomizeRobotPose)
         {
             for (int attempt = 0; attempt < maxPlacementAttempts; attempt++)
             {
@@ -368,74 +273,42 @@ public sealed class TrainingArena : MonoBehaviour
         agent.transform.localScale = robotScale;
     }
 
-    private void PlaceBallOutsideInitialFov()
+    private void PlaceBall()
     {
         if (targetBall == null)
             return;
 
         Vector3 robotWorld = agent != null ? agent.transform.position : transform.position;
-        Vector3 chosen = ArenaToWorld(new Vector3(relayBallX, ballHeight, 0.7f));
+        Vector3 chosen = ArenaToWorld(new Vector3(1.2f, ballHeight, 0f));
         float ballRadius = GetBallHorizontalRadius();
-        bool placed = false;
 
         for (int attempt = 0; attempt < maxPlacementAttempts; attempt++)
         {
-            float z = Random.Range(-relayBallZJitter, relayBallZJitter);
-            if (attempt < maxPlacementAttempts / 2)
-                z = (Random.value < 0.5f ? -1f : 1f) * Random.Range(0.4f, relayBallZJitter);
-
-            float x = relayBallX + Random.Range(-0.1f, 0.1f);
-            Vector3 local = new Vector3(x, ballHeight, z);
+            Vector3 local = RandomBallPointOnFloor();
             if (!IsInsidePlayable(local.x, local.z, ballWallClearance + ballRadius))
                 continue;
 
             Vector3 world = ArenaToWorld(local);
             float distance = HorizontalDistance(world, robotWorld);
-            if (distance < minBallDistanceFromRobot)
+            if (distance < minBallDistanceFromRobot || distance > maxBallDistanceFromRobot)
                 continue;
-
-            ApplyBallWorldPose(world);
-
-            if (yoloCamera != null)
-                yoloCamera.targetBall = targetBall;
-
-            Physics.SyncTransforms();
-
-            if (requireBallOutsideInitialFov &&
-                yoloCamera != null &&
-                yoloCamera.IsTargetGeometricallyVisible(targetBall))
-            {
-                continue;
-            }
 
             chosen = world;
-            placed = true;
             break;
         }
 
-        if (!placed)
+        if (ballBody != null)
         {
-            float z = Random.value < 0.5f ? -relayBallZJitter : relayBallZJitter;
-            chosen = ArenaToWorld(new Vector3(relayBallX, ballHeight, z));
-            ApplyBallWorldPose(chosen);
-            if (yoloCamera != null)
-                yoloCamera.targetBall = targetBall;
-            Physics.SyncTransforms();
-
-            if (requireBallOutsideInitialFov &&
-                agent != null &&
-                yoloCamera != null &&
-                yoloCamera.IsTargetGeometricallyVisible(targetBall))
-            {
-                Vector3 away = robotWorld - chosen;
-                away.y = 0f;
-                if (away.sqrMagnitude > 0.001f)
-                {
-                    Quaternion yawAway = Quaternion.LookRotation(away.normalized, Vector3.up);
-                    agent.TeleportToArenaPose(robotWorld, yawAway);
-                    Physics.SyncTransforms();
-                }
-            }
+            ballBody.isKinematic = false;
+            ballBody.linearVelocity = Vector3.zero;
+            ballBody.angularVelocity = Vector3.zero;
+            ballBody.position = chosen;
+            ballBody.rotation = Quaternion.identity;
+            ballBody.WakeUp();
+        }
+        else
+        {
+            targetBall.SetPositionAndRotation(chosen, Quaternion.identity);
         }
 
         targetBall.localScale = ballScale;
@@ -443,31 +316,10 @@ public sealed class TrainingArena : MonoBehaviour
             yoloCamera.targetBall = targetBall;
     }
 
-    private void ApplyBallWorldPose(Vector3 world)
-    {
-        if (ballBody != null)
-        {
-            ballBody.isKinematic = false;
-            ballBody.linearVelocity = Vector3.zero;
-            ballBody.angularVelocity = Vector3.zero;
-            ballBody.position = world;
-            ballBody.rotation = Quaternion.identity;
-            ballBody.WakeUp();
-        }
-        else if (targetBall != null)
-        {
-            targetBall.SetPositionAndRotation(world, Quaternion.identity);
-        }
-    }
-
     private void RebuildObstacles()
     {
         obstacleFootprints.Clear();
-        int count = Mathf.Max(minObstacles, maxObstacles);
-        // Fixed count when min==max; otherwise inclusive random.
-        if (minObstacles != maxObstacles)
-            count = Random.Range(minObstacles, maxObstacles + 1);
-
+        int count = Random.Range(minObstacles, maxObstacles + 1);
         for (int i = 0; i < count; i++)
         {
             if (!TryCreateObstacle($"Obstacle_{i}"))

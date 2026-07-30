@@ -1,40 +1,25 @@
-# Обучение GFS-X (FixedArm) — Этап 2 эстафеты
+# FixedArm catch-fix + camera smooth (+20M resume)
 
-Агент: езда + **pan (S5)**, клешня фикс (S1=−46° / S2=10° / S3=−90° / S4=35–85), tilt ≈ −15°.
+## Current run
+`fixed_arm_30m_catchfix_x6` · 30M · 40×6 — catch-weighted rewards.
 
-## Сценарий эпизода
+## After 30M (auto)
+Waiter rebuilds with camera fixes and **resumes same run to 50M** (+20M):
+- reset tilt **0°** (was −15° down)
+- pan/tilt speeds **45/35 °/s** (was 100/80)
+- command deadzone **0.15** + light jitter penalty
+- downward tilt floor **−12°**
 
-1. Ровер у **стартового** края (красный куб `RedHomeCube`)  
-2. Мяч у **противоположного** края, **вне начального FOV** камеры  
-3. **8** коробок фиксированно  
-4. Seek → зона мяча → захват → **возврат к красному кубу** с мячом  
-
-## Конфиг
-
-| Параметр | Значение |
-|----------|----------|
-| Behavior | `GFSX_Brain_Fixed` |
-| `max_steps` | **30 000 000** |
-| Run id | `fixed_arm_30m_relay_x4` |
-| Env | 4 × headless |
-| Эпизод | до 6000 steps |
-
-Метрика: `GFSX/Grasp/CatchPercent`.
-
-## Запуск
+Logs:
+- `Logs/fixed_arm_30m_catchfix_x6.log` (first 30M)
+- `Logs/wait_then_resume_50m_camfix.log` (waiter)
+- `Logs/fixed_arm_30m_catchfix_x6_resume50m.log` (+20M)
 
 ```bash
-conda activate mlagents
-cd /home/vladislavdauer/PycharmProjects/YandexRobotics-StudCamp
-export DISPLAY=:0
-export MONO_THREADS_SUSPEND=preemptive
-
+# waiter already queued; manual resume if needed:
 mlagents-learn config_fixed.yaml \
-  --run-id=fixed_arm_30m_relay_x4 \
-  --env=Build/GFSX_Simulator \
-  --num-envs=4 \
-  --no-graphics \
-  --force
+  --run-id=fixed_arm_30m_catchfix_x6 \
+  --env=Build/GFSX_Simulator --num-envs=6 --no-graphics --resume
 ```
 
-Валидация: **GFS-X → Validate Fixed Arm Now**.
+Watch **`GFSX/Grasp/CatchPercent`**.

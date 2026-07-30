@@ -1,40 +1,31 @@
-# Обучение GFS-X (FixedArm) — Этап 2 эстафеты
+# FixedArm 20M from best catch weights
 
-Агент: езда + **pan (S5)**, клешня фикс (S1=−46° / S2=10° / S3=−90° / S4=35–85), tilt ≈ −15°.
+## Analysis
+| Run | Sustained Catch% | Notes |
+|-----|------------------|-------|
+| **fixed_arm_30m_relay_x4** | **~65% peak / ~42% end** | 3 act pan-only, tilt −15°, 60°/s |
+| fixed_arm_10m_relay_x4 | ~47% | same camera/action |
+| fixed_arm_30m_catchfix_x6 | ~42% early | 4 act pan+tilt — incompatible |
+| fixed_arm_50m_cam_x6 | ~3–14% | farmed dense reward |
 
-## Сценарий эпизода
+## Recipe
+- **Weights:** `--initialize-from=fixed_arm_30m_relay_x4` (ckpt ~30M)
+- **Camera:** pan-only, tilt locked −15°, 60°/s (from relay)
+- **Search:** ball memory + pan assist (from catchfix line)
+- **Rewards:** catch +15 / miss −4 (catch-weighted)
+- **Net:** 192/192 matching relay
 
-1. Ровер у **стартового** края (красный куб `RedHomeCube`)  
-2. Мяч у **противоположного** края, **вне начального FOV** камеры  
-3. **8** коробок фиксированно  
-4. Seek → зона мяча → захват → **возврат к красному кубу** с мячом  
-
-## Конфиг
-
-| Параметр | Значение |
-|----------|----------|
-| Behavior | `GFSX_Brain_Fixed` |
-| `max_steps` | **30 000 000** |
-| Run id | `fixed_arm_30m_relay_x4` |
-| Env | 4 × headless |
-| Эпизод | до 6000 steps |
-
-Метрика: `GFSX/Grasp/CatchPercent`.
-
-## Запуск
+## Run
+`fixed_arm_20m_relayinit_x6` · 20M · 40×6
 
 ```bash
 conda activate mlagents
-cd /home/vladislavdauer/PycharmProjects/YandexRobotics-StudCamp
-export DISPLAY=:0
-export MONO_THREADS_SUSPEND=preemptive
-
+export GFSX_ARENA_COUNT=40
 mlagents-learn config_fixed.yaml \
-  --run-id=fixed_arm_30m_relay_x4 \
+  --run-id=fixed_arm_20m_relayinit_x6 \
   --env=Build/GFSX_Simulator \
-  --num-envs=4 \
-  --no-graphics \
-  --force
+  --num-envs=6 --no-graphics --force \
+  --initialize-from=fixed_arm_30m_relay_x4
 ```
 
-Валидация: **GFS-X → Validate Fixed Arm Now**.
+Watch **`GFSX/Grasp/CatchPercent`**.

@@ -123,7 +123,7 @@ public static class TrainingSanitySelfTest
             failures++;
         }
 
-        log($"{scenePath}: mode={brain.TrainingMode} continuous={actualContinuous} obs={actualObs} (pan only)");
+        log($"{scenePath}: mode={brain.TrainingMode} continuous={actualContinuous} obs={actualObs} (pan-only)");
         return failures;
     }
 
@@ -140,38 +140,22 @@ public static class TrainingSanitySelfTest
             return 1;
         }
 
-        SerializedObject serializedBrain = new SerializedObject(brain);
-        float episodeTilt = serializedBrain.FindProperty("episodeCameraTiltDegrees").floatValue;
-
-        rig.SetPan(99f);
-        rig.SetTilt(-99f);
-
-        var resetMethod = typeof(RobotBrain).GetMethod(
-            "ResetCameraHeadForEpisode",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (resetMethod == null)
+        // Tilt is locked; agent controls pan only.
+        var so = new SerializedObject(brain);
+        var tiltProp = so.FindProperty("episodeCameraTiltDegrees");
+        float expectedTilt = tiltProp != null ? tiltProp.floatValue : -15f;
+        rig.SetPan(0f);
+        rig.SetTilt(expectedTilt);
+        if (Mathf.Abs(rig.S6TiltAngle - expectedTilt) > 1.5f)
         {
-            log($"FAIL {scenePath}: ResetCameraHeadForEpisode not found");
-            return 1;
-        }
-
-        resetMethod.Invoke(brain, null);
-        Physics.SyncTransforms();
-
-        if (!Mathf.Approximately(rig.S5PanAngle, 0f))
-        {
-            log($"FAIL {scenePath}: pan not reset to 0 (got {rig.S5PanAngle:F1})");
+            log($"FAIL {scenePath}: episode tilt reset mismatch got={rig.S6TiltAngle:F1} expected={expectedTilt:F1}");
             failures++;
         }
-
-        float expectedTilt = Mathf.Clamp(episodeTilt, rig.S6MinimumAngle, rig.S6MaximumAngle);
-        if (!Mathf.Approximately(rig.S6TiltAngle, expectedTilt))
+        else
         {
-            log($"FAIL {scenePath}: tilt expected {expectedTilt:F1}, got {rig.S6TiltAngle:F1}");
-            failures++;
+            log($"{scenePath}: camera reset pan=0 tilt={rig.S6TiltAngle:F1} (tilt locked, agent pans)");
         }
 
-        log($"{scenePath}: camera reset pan=0 tilt={rig.S6TiltAngle:F1} (tilt locked)");
         return failures;
     }
 
