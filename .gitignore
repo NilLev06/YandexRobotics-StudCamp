@@ -7,6 +7,11 @@ core.*
 .ipynb_checkpoints
 .autostart
 log/
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
 maps/*.pbstream
 maps/*.pgm
 maps/*.yaml
