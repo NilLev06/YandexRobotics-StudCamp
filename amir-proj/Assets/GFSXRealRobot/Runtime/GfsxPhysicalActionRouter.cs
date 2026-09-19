@@ -1232,6 +1232,12 @@ public sealed class GfsxPhysicalActionRouter : MonoBehaviour
         if (telemetry != null)
         {
             GUILayout.Label(
+                $"Pi gates: servo {(telemetry.ServoArmedAckFresh ? (telemetry.ServoArmed ? "ACK/ARMED" : "ACK/DISARMED") : "STALE")}, " +
+                $"drive {(telemetry.DriveArmedAckFresh ? (telemetry.DriveArmedAck ? "ACK/ARMED" : "ACK/DISARMED") : "STALE")}");
+        }
+        if (telemetry != null)
+        {
+            GUILayout.Label(
                 $"sonar {telemetry.UltrasonicMetres:F2} m | IR IO2-left/IO1-right/IO3-claw/IO4-rear " +
                 $"{telemetry.LeftIr:F0}/{telemetry.RightIr:F0}/{telemetry.GripperIr:F0}/{telemetry.RearIr:F0}");
             GUILayout.Label(

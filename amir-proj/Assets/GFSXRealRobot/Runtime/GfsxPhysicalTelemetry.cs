@@ -14,9 +14,11 @@ public sealed class GfsxPhysicalTelemetry : MonoBehaviour
     private const int ServoCount = 6;
     private const string SensorTopic = "/sensor/data";
     private const string RearIrTopic = "/sensor/rear_ir";
+    private const string GripperIrTopic = "/sensor/gripper_ir";
     private const string MotorPwmTopic = "/gfsx/motor_pwm";
     private const string ServoStateTopic = "/gfsx/servo_state_degrees";
     private const string ServoArmedTopic = "/gfsx/servo_armed";
+    private const string DriveArmedTopic = "/gfsx/drive_armed";
     private const string HardwareStatusTopic = "/gfsx/hardware_status";
 
     [Header("ROS-TCP Endpoint on Raspberry Pi")]
@@ -46,20 +48,26 @@ public sealed class GfsxPhysicalTelemetry : MonoBehaviour
     private float rightIr;
     private float gripperIr;
     private float rearIr;
+    private float gripperIrStandalone;
     private float leftPwm;
     private float rightPwm;
     private bool servoArmed;
+    private bool driveArmed;
     private string hardwareStatus = "No status received.";
     private bool hasSensor;
     private bool hasRearIr;
+    private bool hasGripperIrStandalone;
     private bool hasMotorPwm;
     private bool hasServoState;
     private bool hasServoArmed;
+    private bool hasDriveArmed;
     private float sensorTime = float.NegativeInfinity;
     private float rearIrTime = float.NegativeInfinity;
+    private float gripperIrStandaloneTime = float.NegativeInfinity;
     private float motorPwmTime = float.NegativeInfinity;
     private float servoStateTime = float.NegativeInfinity;
     private float servoArmedTime = float.NegativeInfinity;
+    private float driveArmedTime = float.NegativeInfinity;
     private Vector2 estimatedDisplacement;
     private float estimatedHeadingDegrees;
     private float estimatedSpeedMetresPerSecond;
@@ -72,9 +80,11 @@ public sealed class GfsxPhysicalTelemetry : MonoBehaviour
         ros != null && ros.HasConnectionThread && !ros.HasConnectionError;
     public bool SensorFresh => Fresh(hasSensor, sensorTime, sensorTimeoutSeconds);
     public bool RearIrFresh => Fresh(hasRearIr, rearIrTime, sensorTimeoutSeconds);
+    public bool GripperIrStandaloneFresh => Fresh(hasGripperIrStandalone, gripperIrStandaloneTime, sensorTimeoutSeconds);
     public bool MotorPwmFresh => Fresh(hasMotorPwm, motorPwmTime, motorPwmTimeoutSeconds);
     public bool ServoStateFresh => Fresh(hasServoState, servoStateTime, servoTimeoutSeconds);
     public bool ServoArmedAckFresh => Fresh(hasServoArmed, servoArmedTime, servoTimeoutSeconds);
+    public bool DriveArmedAckFresh => Fresh(hasDriveArmed, driveArmedTime, servoTimeoutSeconds);
     public int SensorPacketCount => sensorPacketCount;
     public float UltrasonicMetres => SensorFresh ? ultrasonicMetres : 0f;
     public float UltrasonicNormalized => SensorFresh
@@ -84,7 +94,11 @@ public sealed class GfsxPhysicalTelemetry : MonoBehaviour
     public float RightIr => SensorFresh ? rightIr : 1f;
     public float GripperIr => SensorFresh ? gripperIr : 0f;
     public float RearIr => RearIrFresh ? rearIr : 1f;
+    public float GripperIrStandalone => GripperIrStandaloneFresh
+        ? gripperIrStandalone
+        : 0f;
     public bool ServoArmed => ServoArmedAckFresh && servoArmed;
+    public bool DriveArmedAck => DriveArmedAckFresh && driveArmed;
     public string HardwareStatus => hardwareStatus;
     public Vector2 EstimatedDisplacement => estimatedDisplacement;
     public float EstimatedHeadingDegrees => estimatedHeadingDegrees;
@@ -208,12 +222,16 @@ public sealed class GfsxPhysicalTelemetry : MonoBehaviour
             ros.Subscribe<QuaternionMsg>(SensorTopic, ReceiveSensor);
         if (!ros.HasSubscriber(RearIrTopic))
             ros.Subscribe<Int32Msg>(RearIrTopic, ReceiveRearIr);
+        if (!ros.HasSubscriber(GripperIrTopic))
+            ros.Subscribe<Int32Msg>(GripperIrTopic, ReceiveGripperIrStandalone);
         if (!ros.HasSubscriber(MotorPwmTopic))
             ros.Subscribe<Vector3Msg>(MotorPwmTopic, ReceiveMotorPwm);
         if (!ros.HasSubscriber(ServoStateTopic))
             ros.Subscribe<Float32MultiArrayMsg>(ServoStateTopic, ReceiveServoState);
         if (!ros.HasSubscriber(ServoArmedTopic))
             ros.Subscribe<BoolMsg>(ServoArmedTopic, ReceiveServoArmed);
+        if (!ros.HasSubscriber(DriveArmedTopic))
+            ros.Subscribe<BoolMsg>(DriveArmedTopic, ReceiveDriveArmed);
         if (!ros.HasSubscriber(HardwareStatusTopic))
             ros.Subscribe<StringMsg>(HardwareStatusTopic, ReceiveHardwareStatus);
     }
@@ -239,6 +257,15 @@ public sealed class GfsxPhysicalTelemetry : MonoBehaviour
         rearIr = message.data != 0 ? 1f : 0f;
         hasRearIr = true;
         rearIrTime = Time.realtimeSinceStartup;
+    }
+
+    private void ReceiveGripperIrStandalone(Int32Msg message)
+    {
+        if (message == null)
+            return;
+        gripperIrStandalone = message.data != 0 ? 1f : 0f;
+        hasGripperIrStandalone = true;
+        gripperIrStandaloneTime = Time.realtimeSinceStartup;
     }
 
     private void ReceiveMotorPwm(Vector3Msg message)
@@ -273,6 +300,15 @@ public sealed class GfsxPhysicalTelemetry : MonoBehaviour
         servoArmed = message.data;
         hasServoArmed = true;
         servoArmedTime = Time.realtimeSinceStartup;
+    }
+
+    private void ReceiveDriveArmed(BoolMsg message)
+    {
+        if (message == null)
+            return;
+        driveArmed = message.data;
+        hasDriveArmed = true;
+        driveArmedTime = Time.realtimeSinceStartup;
     }
 
     private void ReceiveHardwareStatus(StringMsg message)
