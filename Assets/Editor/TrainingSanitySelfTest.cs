@@ -69,17 +69,32 @@ public static class TrainingSanitySelfTest
     {
         int failures = 0;
 
-        float approachNet = 0.01f * 1.0f - 0.001f;
+        // Must match RobotBrain.cs serialized defaults (catch-weighted contract):
+        // timePenalty 0.0008, approachRewardScale 0.7, closeApproachBoost 1.2,
+        // catchSuccessReward 15, same clamping caps as EvaluateSeekRewards.
+        float timePenalty = 0.0008f;
+        float approachRewardScale = 0.7f;
+        float closeApproachBoost = 1.2f;
+        float approachMaxCap = 0.08f;
+        float catchSuccessReward = 15.0f;
+
+        // Near the ball closeness -> 1, so the per-step approach multiplier peaks
+        // at scale * (1 + boost). A small approach must beat one step of time
+        // penalty, otherwise the policy has no gradient to approach.
+        float nearBallApproachGain = 0.01f * approachRewardScale * (1f + closeApproachBoost);
+        float approachNet = Mathf.Min(nearBallApproachGain, approachMaxCap) - timePenalty;
         if (approachNet <= 0f)
         {
             log("FAIL reward-math: 1 cm approach should beat time penalty");
             failures++;
         }
 
-        float catchReward = 2.0f;
-        if (catchReward < 1.5f)
+        // The catch payout must dominate the dense shaping it farms (1.0 ball zone
+        // reward and repeated 0.05 hold ticks), otherwise the policy loops around
+        // the ball instead of committing to a grasp.
+        if (catchSuccessReward <= approachRewardScale * 2f)
         {
-            log("FAIL reward-math: catch success reward too weak vs original");
+            log("FAIL reward-math: catch success reward too weak vs approach shaping");
             failures++;
         }
 

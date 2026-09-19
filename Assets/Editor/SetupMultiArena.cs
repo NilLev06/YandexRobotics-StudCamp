@@ -9,7 +9,8 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public static class SetupMultiArena
 {
-    private const string ScenePath = "Assets/Scenes/P2_DigitalTwin.unity";
+    // FixedArm scene is the only training scene in this branch (P2 was retired).
+    private const string ScenePath = "Assets/Scenes/P3_DigitalTwin_FixedArm.unity";
 
     [MenuItem("GFS-X/Setup Multi-Arena Scene")]
     public static void SetupFromMenu()

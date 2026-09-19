@@ -13,8 +13,8 @@ public static class SetupTrainingScenes
 {
     private const string FixedScenePath = "Assets/Scenes/P3_DigitalTwin_FixedArm.unity";
     private const string FixedBehaviorName = "GFSX_Brain_Fixed";
-    private const int ContinuousActions = 4;
-    private const int VectorObservations = 16;
+    private const int ContinuousActions = 3;
+    private const int VectorObservations = 15;
 
     [MenuItem("GFS-X/Setup Training Scenes")]
     public static void SetupFromMenu()
