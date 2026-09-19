@@ -39,7 +39,7 @@ Do not bypass the defaults. The July 14 audit found all of the following:
   0.08 m circular radius.
 - The motor layer enforced a relatively fast minimum in-place turn despite a
   lower requested ROS angular speed. This has been reduced from 0.8 to
-  0.3 rad/s (`hwnode/hwnode/hwnode.py: MIN_INPLACE_ANGULAR`), but the chassis
+  0.35 rad/s (`hwnode/hwnode/hwnode.py: MIN_INPLACE_ANGULAR`), but the chassis
   swept radius still needs to be physically measured before that number is
   trusted for approach mode.
 - Nav2 path-following collision detection is disabled.

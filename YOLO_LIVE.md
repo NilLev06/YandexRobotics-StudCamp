@@ -19,9 +19,12 @@ docker compose -f docker-compose.yolo-live.yaml up -d
 ```
 
 Port 8091 is already reserved (mapped but unused) by the main `ros` container's
-`docker-compose.yaml`, so this sidecar binds 8092 instead. Change
-`HTTP_PORT`/`YOLO_LIVE_BIND_HOST` in `docker-compose.yolo-live.yaml` and the
-port in the URLs below if 8092 is also taken on your rover.
+`docker-compose.yaml`, so this sidecar binds 8092 instead — both inside the
+rover network and on the host. All consumers (`object_search.py`, the
+dashboard, and telemetry) talk to it as `z-boys-yolo-live:8092`; browser
+links below use host port 8092. Change `HTTP_PORT`/`YOLO_LIVE_BIND_HOST` in
+`docker-compose.yolo-live.yaml` and the port in the URLs below if 8092 is
+also taken on your rover.
 
 Open:
 
@@ -89,5 +92,5 @@ Do **not** use the existing `z_boys/docker-compose.yaml` for this feature. That
 file describes a second full privileged rover stack and conflicts with the
 main `ros` container name, ports, and hardware access.
 
-The port 8091 stream has no authentication. Keep it on the trusted rover LAN;
+The port 8092 stream has no authentication. Keep it on the trusted rover LAN;
 do not expose it directly to the public internet.
