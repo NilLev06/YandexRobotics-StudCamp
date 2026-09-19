@@ -42,11 +42,11 @@
 </main>
 <script>
   const host = location.hostname;
-  document.getElementById('cam').src = `http://${host}:8091/stream.mjpg`;
-  document.getElementById('dash').src = `http://${host}:8092/`;
+  document.getElementById('cam').src = `http://${host}:8092/stream.mjpg`;
+  document.getElementById('dash').src = `http://${host}:8094/`;
   document.getElementById('link-map').href = `http://${host}:8093/`;
-  document.getElementById('link-snapshot').href = `http://${host}:8091/snapshot.jpg`;
-  document.getElementById('link-health').href = `http://${host}:8091/health`;
+  document.getElementById('link-snapshot').href = `http://${host}:8092/snapshot.jpg`;
+  document.getElementById('link-health').href = `http://${host}:8092/health`;
   // Foxglove Studio, connected to the rover's foxglove_bridge websocket
   document.getElementById('link-foxglove').href =
     `https://app.foxglove.dev/?ds=foxglove-websocket&ds.url=ws%3A%2F%2F${host}%3A8765`;

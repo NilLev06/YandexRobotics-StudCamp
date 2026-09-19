@@ -1526,10 +1526,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--search-only", action="store_true", help="find the target but never approach"
     )
     parser.add_argument(
-        "--yolo-url", default="http://z-boys-yolo-live:8091/health"
+        "--yolo-url", default="http://z-boys-yolo-live:8092/health"
     )
     parser.add_argument(
-        "--snapshot-url", default="http://z-boys-yolo-live:8091/snapshot.jpg"
+        "--snapshot-url", default="http://z-boys-yolo-live:8092/snapshot.jpg"
     )
     parser.add_argument(
         "--calibration", default="/app/search_calibration.json"

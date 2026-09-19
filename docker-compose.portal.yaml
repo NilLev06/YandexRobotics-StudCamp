@@ -1,7 +1,7 @@
 # Единая страница "центр управления": камера+YOLO слева, телеметрийный
 # дашборд справа (в iframe). Никакой отдельной логики — просто статический
 # HTML-файл, отданный стандартным http.server. Требует запущенных
-# yolo-live (порт 8091) и dashboard (порт 8092).
+# yolo-live (порт 8092) и dashboard (порт 8094).
 
 services:
   portal:
@@ -21,7 +21,7 @@ services:
       - /usr/bin/python3
       - -m
       - http.server
-      - "8090"
+      - "8095"
       - --bind
       - "0.0.0.0"
     volumes:
@@ -29,7 +29,7 @@ services:
     tmpfs:
       - /tmp:size=8m,mode=1777
     ports:
-      - "0.0.0.0:8090:8090"
+      - "0.0.0.0:8095:8095"
     stop_grace_period: 5s
     logging:
       driver: json-file

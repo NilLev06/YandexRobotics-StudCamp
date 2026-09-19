@@ -30,6 +30,9 @@ services:
       MJPEG_STREAM_FPS: "10"
       MJPEG_QUALITY: "75"
       HTTP_HOST: 0.0.0.0
+      # Same port inside the rover network: containers reach this sidecar as
+      # z-boys-yolo-live:8092 (object_search.py / dashboard / telemetry). Do
+      # not change this alone — browser links on host port 8092 expect it too.
       HTTP_PORT: "8092"
       MAX_STREAM_CLIENTS: "4"
       ROS_DISTRO: jazzy

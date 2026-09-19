@@ -23,8 +23,8 @@ services:
       ROS_DOMAIN_ID: "0"
       ROS_LOG_DIR: /tmp
       DASHBOARD_HOST: 0.0.0.0
-      DASHBOARD_PORT: "8092"
-      DASHBOARD_YOLO_URL: http://z-boys-yolo-live:8091/health
+      DASHBOARD_PORT: "8094"
+      DASHBOARD_YOLO_URL: http://z-boys-yolo-live:8092/health
       DASHBOARD_DISK_PATH: /host-root
     entrypoint:
       - /root/venv/bin/python
@@ -37,7 +37,7 @@ services:
     tmpfs:
       - /tmp:size=16m,mode=1777
     ports:
-      - "0.0.0.0:8092:8092"
+      - "0.0.0.0:8094:8094"
     networks:
       - rover-main
     stop_grace_period: 8s

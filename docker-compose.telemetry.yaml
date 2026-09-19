@@ -84,7 +84,7 @@ services:
     cpu_shares: 128
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
-      YOLO_VIDEO_SOURCE: http://z-boys-yolo-live:8091/stream.mjpg
+      YOLO_VIDEO_SOURCE: http://z-boys-yolo-live:8092/stream.mjpg
       YOLO_VIDEO_OUTPUT_DIR: /logs/session/video
     entrypoint:
       - /root/venv/bin/python

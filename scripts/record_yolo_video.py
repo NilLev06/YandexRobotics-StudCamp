@@ -34,7 +34,7 @@ def segment_filename(output_dir: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default=os.getenv(
-        "YOLO_VIDEO_SOURCE", "http://z-boys-yolo-live:8091/stream.mjpg"))
+        "YOLO_VIDEO_SOURCE", "http://z-boys-yolo-live:8092/stream.mjpg"))
     parser.add_argument("--output-dir", default=os.getenv(
         "YOLO_VIDEO_OUTPUT_DIR", "/logs/session/video"))
     parser.add_argument("--segment-seconds", type=float, default=float(

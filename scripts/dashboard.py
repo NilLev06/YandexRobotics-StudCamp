@@ -185,9 +185,9 @@ async function update() {
     document.getElementById('status').textContent = 'офлайн';
   }
 }
-// YOLO sidecar is a separate container on port 8091, browser-reachable at
+// YOLO sidecar is a separate container on port 8092, browser-reachable at
 // the same host this dashboard was loaded from.
-document.getElementById('cam').src = `http://${location.hostname}:8091/stream.mjpg`;
+document.getElementById('cam').src = `http://${location.hostname}:8092/stream.mjpg`;
 update();
 setInterval(update, 1000);
 </script>
@@ -438,9 +438,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.getenv("DASHBOARD_HOST", "0.0.0.0"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("DASHBOARD_PORT", "8092")))
+    parser.add_argument("--port", type=int, default=int(os.getenv("DASHBOARD_PORT", "8094")))
     parser.add_argument("--yolo-url", default=os.getenv("DASHBOARD_YOLO_URL",
-                                                          "http://z-boys-yolo-live:8091/health"))
+                                                          "http://z-boys-yolo-live:8092/health"))
     parser.add_argument("--disk-path", default=os.getenv("DASHBOARD_DISK_PATH", "/"))
     args = parser.parse_args()
 

@@ -227,7 +227,7 @@ def disk_guard(sessions_dir: Path, current_session: Path, events_path: Path,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--session-dir", required=True)
-    parser.add_argument("--yolo-url", default="http://127.0.0.1:8091/health")
+    parser.add_argument("--yolo-url", default="http://127.0.0.1:8092/health")
     parser.add_argument("--cap-gb", type=float, default=10.0)
     parser.add_argument("--min-free-gb", type=float, default=2.0)
     args = parser.parse_args()
