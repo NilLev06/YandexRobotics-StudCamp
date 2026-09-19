@@ -2,11 +2,10 @@ launch:
   - node:
       pkg: hwnode
       exec: hwnode
-  - node:
-      pkg: voice
-      exec: tts_node
-      name: tts
-      output: screen
+  - include:
+      # voice.launch.py starts BOTH stt_node and tts_node. STT fills
+      # /voice/recognized_text for object_search_manager ("ровер, найди мяч").
+      file: $(find-pkg-share voice)/launch/voice.launch.py
   - node:
       pkg: main
       exec: battery_guard.py
